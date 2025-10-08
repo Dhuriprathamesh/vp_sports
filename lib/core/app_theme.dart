@@ -6,29 +6,30 @@ import 'package:flutter/services.dart';
 // Shared color for AppBar, keeping it green as requested.
 const Color _appBarColor = Color(0xFF0A4F43); 
 
-// --- Boys Theme Colors ---
-const Color _boyGradientStart = Color(0xFFE3F2FD); // Light Blue
-const Color _boyGradientEnd = Color(0xFFE1BEE7);   // Light Purple
-const Color _boyAccentColor = Color(0xFF42A5F5);   // A brighter blue for accents
-const Color _boyCardColor = Colors.white;
+// --- Original Boys Theme Colors (Now for Girls) ---
+const Color _blueGradientStart = Color(0xFFE3F2FD); // Light Blue
+const Color _purpleGradientEnd = Color(0xFFE1BEE7);   // Light Purple
+const Color _blueAccentColor = Color(0xFF42A5F5);   // A brighter blue for accents
 
-// --- Girls Theme Colors ---
-const Color _girlGradientStart = Color(0xFFFFEBEE); // Light Red/Pink
-const Color _girlGradientEnd = Color(0xFFFFE0B2);   // Light Orange/Peach
-const Color _girlAccentColor = Color(0xFFEC407A);   // A brighter pink for accents
-const Color _girlCardColor = Colors.white;
+// --- Original Girls Theme Colors (Now for Boys) ---
+const Color _redGradientStart = Color(0xFFFFEBEE); // Light Red/Pink
+const Color _peachGradientEnd = Color(0xFFFFE0B2);   // Light Orange/Peach
+const Color _pinkAccentColor = Color(0xFFEC407A);   // A brighter pink for accents
+
+const Color _cardColor = Colors.white;
 
 class AppTheme {
 
+  // --- THEMES ARE SWAPPED HERE ---
   // Static color lists to be used for the gradients in the UI.
-  static const List<Color> boysGradientColors = [_boyGradientStart, _boyGradientEnd];
-  static const List<Color> girlsGradientColors = [_girlGradientStart, _girlGradientEnd];
+  static const List<Color> boysGradientColors = [_redGradientStart, _peachGradientEnd];
+  static const List<Color> girlsGradientColors = [_blueGradientStart, _purpleGradientEnd];
 
-  // --- Boys Theme Definition ---
+  // --- Boys Theme Definition (Using Red/Peach Gradient) ---
   static final ThemeData boysLightTheme = ThemeData(
     brightness: Brightness.light,
     primaryColor: _appBarColor,
-    scaffoldBackgroundColor: _boyGradientStart, // Sets the base color for screen transitions
+    scaffoldBackgroundColor: _redGradientStart, // Sets the base color for screen transitions
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: _appBarColor,
@@ -46,7 +47,7 @@ class AppTheme {
       unselectedItemColor: Colors.grey[600],
       type: BottomNavigationBarType.fixed,
     ),
-    cardColor: _boyCardColor,
+    cardColor: _cardColor,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: _appBarColor,
@@ -57,14 +58,14 @@ class AppTheme {
       titleLarge: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
       bodyLarge: TextStyle(color: Colors.black87),
     ),
-    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.green).copyWith(secondary: _boyAccentColor),
+    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.green).copyWith(secondary: _pinkAccentColor),
   );
 
-  // --- Girls Theme Definition ---
+  // --- Girls Theme Definition (Using Blue/Purple Gradient) ---
   static final ThemeData girlsLightTheme = ThemeData(
     brightness: Brightness.light,
     primaryColor: _appBarColor,
-    scaffoldBackgroundColor: _girlGradientStart, // Base color for the gradient
+    scaffoldBackgroundColor: _blueGradientStart, // Base color for the gradient
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: _appBarColor,
@@ -82,7 +83,7 @@ class AppTheme {
       unselectedItemColor: Colors.grey[600],
       type: BottomNavigationBarType.fixed,
     ),
-    cardColor: _girlCardColor,
+    cardColor: _cardColor,
      elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: _appBarColor,
@@ -93,7 +94,7 @@ class AppTheme {
       titleLarge: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
       bodyLarge: TextStyle(color: Colors.black87),
     ),
-    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.green).copyWith(secondary: _girlAccentColor),
+    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.green).copyWith(secondary: _blueAccentColor),
   );
 }
 
