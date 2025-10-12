@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import '../../../core/app_theme.dart';
-import '../../../data/mock_data.dart'; // Import the centralized data file
+import '../../../data/mock_data.dart';
+import 'add_match.dart';
 
-// A screen to show details for a specific sport.
-class SportsDetailsScreen extends StatelessWidget {
+class AdminSportsDetailsScreen extends StatefulWidget {
   final String sportName;
   final IconData sportIcon;
   final bool isForBoys;
   final Function(bool) onGenderToggle;
 
-  const SportsDetailsScreen({
+  const AdminSportsDetailsScreen({
     super.key,
     required this.sportName,
     required this.sportIcon,
@@ -18,52 +19,34 @@ class SportsDetailsScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return _SportsDetailsView(
-      sportName: sportName,
-      sportIcon: sportIcon,
-      isForBoys: isForBoys,
-      onGenderToggle: onGenderToggle,
-    );
-  }
+  State<AdminSportsDetailsScreen> createState() => _AdminSportsDetailsScreenState();
 }
 
-class _SportsDetailsView extends StatefulWidget {
-  final String sportName;
-  final IconData sportIcon;
-  final bool isForBoys;
-  final Function(bool) onGenderToggle;
-
-  const _SportsDetailsView({
-    required this.sportName,
-    required this.sportIcon,
-    required this.isForBoys,
-    required this.onGenderToggle,
-  });
-
-  @override
-  State<_SportsDetailsView> createState() => _SportsDetailsViewState();
-}
-
-class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTickerProviderStateMixin {
+class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  late final List<MatchResult> _recentMatches;
-  late final List<MatchResult> _liveMatches;
-  late final List<MatchResult> _upcomingMatches;
+  late List<MatchResult> _liveMatches;
+  late List<MatchResult> _recentMatches;
+  late List<MatchResult> _upcomingMatches;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _recentMatches = SportsData.getRecentMatches(widget.sportName);
-    _liveMatches = SportsData.getLiveMatches(widget.sportName);
-    _upcomingMatches = SportsData.getUpcomingMatches(widget.sportName);
+    _loadMatches();
+  }
 
-    if (_liveMatches.isNotEmpty) {
-      _tabController.index = 0;
-    } else {
-      _tabController.index = 1;
-    }
+  void _loadMatches() {
+    setState(() {
+      _liveMatches = SportsData.getLiveMatches(widget.sportName);
+      _recentMatches = SportsData.getRecentMatches(widget.sportName);
+      _upcomingMatches = SportsData.getUpcomingMatches(widget.sportName);
+
+      if (_liveMatches.isNotEmpty) {
+        _tabController.index = 0;
+      } else {
+        _tabController.index = 1;
+      }
+    });
   }
 
   @override
@@ -71,6 +54,40 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
     _tabController.dispose();
     super.dispose();
   }
+  
+  void _showAddMatchDialog(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Container(); // This is not used in the builder.
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final tween = Tween<double>(begin: 0.5, end: 1.0);
+        final scaleAnimation = animation.drive(tween.chain(CurveTween(curve: Curves.easeOutCubic)));
+        final fadeAnimation = animation.drive(Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOut)));
+
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 4 * animation.value, sigmaY: 4 * animation.value),
+          child: FadeTransition(
+            opacity: fadeAnimation,
+            child: ScaleTransition(
+              scale: scaleAnimation,
+              child: Dialog(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: AddMatchScreen(sportName: widget.sportName),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +121,10 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddMatchDialog(context),
+        child: const Icon(Icons.add),
+      ),
       bottomNavigationBar: _buildBottomNavigationBar(context),
     );
   }
@@ -115,14 +136,13 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(widget.sportIcon, color: Colors.white),
           const SizedBox(width: 8),
-          Text('${widget.sportName} Matches'),
+          Flexible(child: Text('${widget.sportName} Matches')),
         ],
       ),
-      actions: [Container(width: 48)],
       centerTitle: true,
       elevation: 0,
       backgroundColor: Theme.of(context).primaryColor.withOpacity(0.85),
@@ -177,7 +197,7 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
     }
     
     return ListView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
       itemCount: matches.length,
       itemBuilder: (context, index) {
         final match = matches[index];
@@ -513,8 +533,6 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
           Navigator.of(context).pop();
         } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
-        } else {
-          // Handle navigation to Schedule/Leaderboard if needed.
         }
       },
       items: [
@@ -530,8 +548,6 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
   }
 }
 
-
-// --- Animation Widget ---
 class FadeInAnimation extends StatefulWidget {
   final Widget child;
   final Duration delay;

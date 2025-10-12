@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../../../core/app_theme.dart';
-import 'sports_details.dart'; // Import the new screen
+import 'admin_sports_details.dart'; // Navigate to the admin sports details screen
 
-// The main screen of the application.
-class HomeScreen extends StatelessWidget {
+// The main screen of the application for the Admin.
+class AdminHomeScreen extends StatelessWidget {
   final bool isForBoys;
   final Function(bool) onGenderToggle;
 
-  const HomeScreen({
+  const AdminHomeScreen({
+    super.key,
     required this.isForBoys,
     required this.onGenderToggle,
-    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _HomeScreenView(
+    return _AdminHomeScreenView(
       isForBoys: isForBoys,
       onGenderToggle: onGenderToggle,
     );
@@ -24,20 +23,20 @@ class HomeScreen extends StatelessWidget {
 }
 
 // Using a StatefulWidget internally to manage local state and animations.
-class _HomeScreenView extends StatefulWidget {
+class _AdminHomeScreenView extends StatefulWidget {
   final bool isForBoys;
   final Function(bool) onGenderToggle;
   
-  const _HomeScreenView({
+  const _AdminHomeScreenView({
     required this.isForBoys,
     required this.onGenderToggle,
   });
 
   @override
-  State<_HomeScreenView> createState() => _HomeScreenViewState();
+  State<_AdminHomeScreenView> createState() => _AdminHomeScreenViewState();
 }
 
-class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderStateMixin {
+class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerProviderStateMixin {
   int _bottomNavIndex = 0;
   bool _isProfileMenuOpen = false;
   
@@ -58,7 +57,6 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
-    // --- Initializing the Animation Controller ---
     _profileMenuController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
@@ -105,8 +103,6 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
     }
   }
 
-  // --- WIDGET BUILDERS ---
-
   @override
   Widget build(BuildContext context) {
     final gradientColors = widget.isForBoys
@@ -148,26 +144,20 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
     );
   }
 
-  // --- MODIFIED ---
-  // The AppBar now places the logo on the left and resolves the overflow.
   AppBar _buildAppBar(BuildContext context) {
     return AppBar(
-      // Use the leading property for the logo on the far left.
       leading: Padding(
         padding: const EdgeInsets.only(left: 16.0),
         child: Image.asset(
-          'assets/vp_logo.png', // Ensure this path is correct in your pubspec.yaml
+          'assets/vp_logo.png',
           height: 30,
           color: Colors.white,
         ),
       ),
-      // The title is now just the text, which will align next to the leading widget.
       title: const Text('Sports Mania'),
-      // Actions remain on the right.
       actions: [
         _buildProfileIcon(context),
       ],
-      // This is false by default when a leading widget is present.
       centerTitle: true, 
     );
   }
@@ -202,7 +192,7 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
               elevation: 8,
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                width: screenWidth * 0.55, // Slightly wider for better text fit
+                width: screenWidth * 0.55,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -353,7 +343,7 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
           ),
         ),
         SizedBox(
-          height: 160, // Increased height for better padding
+          height: 160,
           child: Transform.translate(
             offset: Offset(-_parallaxOffset, 0),
             child: ListView.builder(
@@ -381,7 +371,7 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Container(
           width: 280,
-          padding: const EdgeInsets.all(16), // Increased padding
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -404,8 +394,8 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
                   Text('172/5', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
                 ],
               ),
-              const SizedBox(height: 8), // Increased spacing
-               Row(
+              const SizedBox(height: 8),
+              Row(
                 children: [
                   const Text('TEAM B', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const Spacer(),
@@ -451,7 +441,7 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
   
   Widget _buildSportCard(BuildContext context, {String? name, IconData? icon, required Color iconColor}) {
     if (name == null || icon == null) {
-      return const SizedBox.shrink(); // Use SizedBox.shrink() instead of a placeholder container
+      return const SizedBox.shrink();
     }
     
     return Material(
@@ -461,29 +451,13 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
       color: Colors.white,
       child: InkWell(
         onTap: () {
-          Navigator.of(context).push(PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => SportsDetailsScreen(
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => AdminSportsDetailsScreen(
               sportName: name,
               sportIcon: icon,
               isForBoys: widget.isForBoys,
               onGenderToggle: widget.onGenderToggle,
             ),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              const begin = Offset(1.0, 0.0);
-              const end = Offset.zero;
-              const curve = Curves.ease;
-
-              final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: FadeTransition(
-                  opacity: animation,
-                  child: child,
-                ),
-              );
-            },
-            transitionDuration: const Duration(milliseconds: 400),
           ));
         },
         borderRadius: BorderRadius.circular(16),

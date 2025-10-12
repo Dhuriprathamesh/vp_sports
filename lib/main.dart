@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/app_theme.dart';
+import 'ui/screens/admin/admin_home.dart';
+import 'ui/screens/login/login.dart';
 import 'ui/screens/user/home_screen.dart';
 
 void main() {
-  // Ensures that widget binding is initialized before running the app.
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Setting preferred orientations for a consistent look.
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
   runApp(const MyApp());
 }
 
@@ -24,37 +22,39 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // State to track whether the boys or girls theme is active.
   bool _isForBoys = true;
+  bool _isAuthenticated = false;
+  String _userType = '';
 
-  // This function is called from the HomeScreen to update the theme.
   void _toggleGenderTheme(bool isForBoys) {
     setState(() {
       _isForBoys = isForBoys;
     });
   }
 
+  void _onLoginSuccess(String userType) {
+    setState(() {
+      _userType = userType;
+      _isAuthenticated = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Dynamically select the theme based on the current state.
     final currentTheme = _isForBoys ? AppTheme.boysLightTheme : AppTheme.girlsLightTheme;
     
-    // Set the status bar color to match the AppBar of the current theme.
-    SystemChrome.setSystemUIOverlayStyle(currentTheme.appBarTheme.systemOverlayStyle!);
+    final systemOverlayStyle = currentTheme.appBarTheme.systemOverlayStyle ?? SystemUiOverlayStyle.light;
+    SystemChrome.setSystemUIOverlayStyle(systemOverlayStyle);
 
     return MaterialApp(
-      title: 'VP Sports',
+      title: 'VP Sports Mania',
       debugShowCheckedModeBanner: false,
-      
-      // The theme is dynamically selected based on the _isForBoys flag.
       theme: currentTheme,
-      
-      // Pass the current state and the callback function to the HomeScreen.
-      home: HomeScreen(
-        isForBoys: _isForBoys,
-        onGenderToggle: _toggleGenderTheme,
-      ),
+      home: _isAuthenticated
+        ? (_userType == 'Admin' 
+            ? AdminHomeScreen(isForBoys: _isForBoys, onGenderToggle: _toggleGenderTheme)
+            : HomeScreen(isForBoys: _isForBoys, onGenderToggle: _toggleGenderTheme))
+        : LoginScreen(onLoginSuccess: _onLoginSuccess),
     );
   }
 }
-

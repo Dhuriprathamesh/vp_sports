@@ -33,13 +33,14 @@ class AppTheme {
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: _appBarColor,
-      elevation: 4,
+      elevation: 0, // Set elevation to 0 for a flatter look
       systemOverlayStyle: SystemUiOverlayStyle(
         statusBarColor: Color(0xFF073A30), // A darker shade of the green AppBar
         statusBarIconBrightness: Brightness.light,
       ),
       iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+      // Reduced font size to prevent overflow issues
+      titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), 
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: Colors.white,
@@ -69,13 +70,14 @@ class AppTheme {
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: _appBarColor,
-      elevation: 4,
+      elevation: 0, // Set elevation to 0 for a flatter look
       systemOverlayStyle: SystemUiOverlayStyle(
         statusBarColor: Color(0xFF073A30), // Same dark green status bar
         statusBarIconBrightness: Brightness.light,
       ),
       iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+      // Reduced font size to prevent overflow issues
+      titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: Colors.white,
@@ -97,4 +99,3 @@ class AppTheme {
     colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.green).copyWith(secondary: _blueAccentColor),
   );
 }
-
