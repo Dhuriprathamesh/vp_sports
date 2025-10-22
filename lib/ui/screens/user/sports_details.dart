@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/app_theme.dart';
-import '../../../data/mock_data.dart'; // Import the centralized data file
+import '../../../data/mock_data.dart';
+import 'match_details_screen.dart';
 
-// A screen to show details for a specific sport.
-class SportsDetailsScreen extends StatelessWidget {
+class SportsDetailsScreen extends StatefulWidget {
   final String sportName;
   final IconData sportIcon;
   final bool isForBoys;
@@ -18,51 +21,99 @@ class SportsDetailsScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return _SportsDetailsView(
-      sportName: sportName,
-      sportIcon: sportIcon,
-      isForBoys: isForBoys,
-      onGenderToggle: onGenderToggle,
-    );
-  }
+  State<SportsDetailsScreen> createState() => _SportsDetailsScreenState();
 }
 
-class _SportsDetailsView extends StatefulWidget {
-  final String sportName;
-  final IconData sportIcon;
-  final bool isForBoys;
-  final Function(bool) onGenderToggle;
-
-  const _SportsDetailsView({
-    required this.sportName,
-    required this.sportIcon,
-    required this.isForBoys,
-    required this.onGenderToggle,
-  });
-
-  @override
-  State<_SportsDetailsView> createState() => _SportsDetailsViewState();
-}
-
-class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTickerProviderStateMixin {
+class _SportsDetailsScreenState extends State<SportsDetailsScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  late final List<MatchResult> _recentMatches;
-  late final List<MatchResult> _liveMatches;
-  late final List<MatchResult> _upcomingMatches;
+
+  List<LiveMatch> _liveMatches = [];
+  List<MatchResult> _recentMatches = [];
+  List<UpcomingMatch> _upcomingMatches = [];
+  bool _isLoading = true;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _recentMatches = SportsData.getRecentMatches(widget.sportName);
-    _liveMatches = SportsData.getLiveMatches(widget.sportName);
-    _upcomingMatches = SportsData.getUpcomingMatches(widget.sportName);
+    _loadAllMatches();
+  }
+
+  Future<void> _fetchMatches(String status) async {
+    if (status == 'upcoming') {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
+
+    try {
+      final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      final sportNameUrl = widget.sportName.toLowerCase();
+      final String apiUrl =
+          'http://$host:5000/api/get_matches/$sportNameUrl?status=$status';
+
+      final response = await http.get(Uri.parse(apiUrl));
+
+      if (mounted) {
+        if (response.statusCode == 200) {
+          final List<dynamic> data = json.decode(response.body);
+
+          if (status == 'live') {
+            final List<LiveMatch> fetchedMatches =
+                data.map<LiveMatch>((json) {
+              return LiveMatch(
+                teamA: json['teamA'],
+                teamB: json['teamB'],
+                score: "0/0",
+                status: "Match is live",
+              );
+            }).toList();
+            setState(() => _liveMatches = fetchedMatches);
+          } else { // upcoming
+            final List<UpcomingMatch> fetchedMatches =
+                data.map<UpcomingMatch>((json) {
+              return UpcomingMatch(
+                id: json['id'],
+                title: '${widget.sportName} Match',
+                teamA: json['teamA'],
+                teamB: json['teamB'],
+                venue: json['venue'],
+                date: json['date'],
+                time: json['time'],
+              );
+            }).toList();
+            setState(() => _upcomingMatches = fetchedMatches);
+          }
+        } else {
+          if (mounted) {
+            setState(() => _errorMessage = 'Failed to load $status matches.');
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Could not connect to the server.');
+        print("Connection Error ($status): $e");
+      }
+    } finally {
+      if (mounted && status == 'upcoming') {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _loadAllMatches() {
+    _fetchMatches('live');
+    _fetchMatches('upcoming');
+    _recentMatches = [];
 
     if (_liveMatches.isNotEmpty) {
       _tabController.index = 0;
     } else {
-      _tabController.index = 1;
+      _tabController.index = 2;
     }
   }
 
@@ -74,10 +125,33 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
 
   @override
   Widget build(BuildContext context) {
-    final gradientColors = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors;
+    final gradientColors =
+        widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors;
 
     return Scaffold(
-      appBar: _buildAppBar(context),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(widget.sportIcon, color: Colors.white),
+            const SizedBox(width: 8),
+            Text('${widget.sportName} Matches'),
+          ],
+        ),
+        actions: [Container(width: 48)],
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Theme.of(context).primaryColor,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: _buildTabBar(context),
+        ),
+      ),
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOut,
@@ -88,19 +162,12 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
             end: Alignment.bottomCenter,
           ),
         ),
-        child: Column(
+        child: TabBarView(
+          controller: _tabController,
           children: [
-            _buildTabBar(context),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildMatchList(context, 'Live', _liveMatches),
-                  _buildMatchList(context, 'Recent', _recentMatches),
-                  _buildMatchList(context, 'Upcoming', _upcomingMatches),
-                ],
-              ),
-            ),
+            _buildMatchList(context, 'Live', _liveMatches),
+            _buildMatchList(context, 'Recent', _recentMatches),
+            _buildUpcomingMatchList(context),
           ],
         ),
       ),
@@ -108,91 +175,115 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
     );
   }
 
-  AppBar _buildAppBar(BuildContext context) {
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(widget.sportIcon, color: Colors.white),
-          const SizedBox(width: 8),
-          Text('${widget.sportName} Matches'),
-        ],
-      ),
-      actions: [Container(width: 48)],
-      centerTitle: true,
-      elevation: 0,
-      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.85),
+  Widget _buildUpcomingMatchList(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_errorMessage.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            _errorMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 16),
+          ),
+        ),
+      );
+    }
+    if (_upcomingMatches.isEmpty) {
+      return _buildEmptyList('Upcoming');
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+      itemCount: _upcomingMatches.length,
+      itemBuilder: (context, index) {
+        final match = _upcomingMatches[index];
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => MatchDetailsScreen(
+                  matchId: match.id,
+                  isAdmin: false,
+                  sportName: widget.sportName,
+                  sportIcon: widget.sportIcon,
+                  isForBoys: widget.isForBoys,
+                  onGenderToggle: widget.onGenderToggle,
+                ),
+              ),
+            );
+          },
+          child: _buildMatchCard(context, match, 'Upcoming'),
+        );
+      },
     );
   }
 
   Widget _buildTabBar(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.1),
+        color: Colors.black.withAlpha(26),
         borderRadius: BorderRadius.circular(20),
       ),
       child: TabBar(
         controller: _tabController,
         labelColor: Theme.of(context).primaryColor,
-        unselectedLabelColor: Colors.white.withOpacity(0.9),
+        unselectedLabelColor: Colors.white.withAlpha(230),
         labelStyle: const TextStyle(fontWeight: FontWeight.bold),
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
-          color: Colors.white.withOpacity(0.95),
+          color: Colors.white.withAlpha(242),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            )
-          ],
         ),
-        tabs: const [Tab(text: 'Live'), Tab(text: 'Recent'), Tab(text: 'Upcoming')],
+        tabs: const [
+          Tab(text: 'Live'),
+          Tab(text: 'Recent'),
+          Tab(text: 'Upcoming')
+        ],
       ),
     );
   }
 
-  Widget _buildMatchList(BuildContext context, String category, List<MatchResult> matches) {
-    if (matches.isEmpty) {
-      return Center(
+  Widget _buildEmptyList(String category) {
+     return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.hourglass_empty, size: 50, color: Colors.white.withOpacity(0.7)),
+            Icon(Icons.hourglass_empty, size: 50, color: Colors.white.withAlpha(179)),
             const SizedBox(height: 16),
             Text(
               'No ${category.toLowerCase()} matches to show.',
-              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
+              style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 16),
             ),
           ],
         ),
       );
+  }
+
+  Widget _buildMatchList(
+      BuildContext context, String category, List<MatchResult> matches) {
+    if (matches.isEmpty) {
+      return _buildEmptyList(category);
     }
-    
+
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: matches.length,
       itemBuilder: (context, index) {
         final match = matches[index];
-        return FadeInAnimation(
-          delay: Duration(milliseconds: 100 + index * 50),
-          child: _buildMatchCard(context, match, category),
-        );
+        return _buildMatchCard(context, match, category);
       },
     );
   }
 
   Widget _buildMatchCard(BuildContext context, MatchResult match, String category) {
     return Card(
-      elevation: 4,
-      shadowColor: Colors.black.withOpacity(0.2),
+      elevation: 2,
+      shadowColor: Colors.black.withAlpha(26),
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -202,69 +293,15 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
           children: [
             _buildCardHeader(context, category),
             const SizedBox(height: 12),
-            _buildCardContent(context, match, category),
+            if (match is UpcomingMatch)
+              _buildUpcomingMatchContent(context, match),
+            if (match is LiveMatch) _buildLiveMatchContent(context, match),
+            if (match is TeamMatchResult) _buildTeamMatchContent(context, match),
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildCardHeader(BuildContext context, String category) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          '${widget.sportName} • League',
-          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: category == 'Live' ? Colors.red.shade100 : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            category.toUpperCase(),
-            style: TextStyle(
-              color: category == 'Live' ? Colors.red.shade800 : Colors.grey.shade700,
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCardContent(BuildContext context, MatchResult match, String category) {
-    if (match is UpcomingMatch) {
-      return _buildUpcomingMatchContent(context, match);
-    }
-    if (match is LiveMatch) {
-      return _buildLiveMatchContent(context, match);
-    }
-    if (match is TeamMatchResult) {
-      return _buildTeamMatchContent(context, match);
-    }
-    if (match is VolleyballMatchResult) {
-      return _buildVolleyballContent(context, match);
-    }
-    if (match is AthleticsResult) {
-      return _buildAthleticsContent(context, match);
-    }
-    if (match is PlayerMatchResult) {
-      return _buildPlayerMatchContent(context, match);
-    }
-    if (match is CarromMatchResult) {
-      return _buildCarromContent(context, match);
-    }
-    if (match is ChessMatchResult) {
-      return _buildChessContent(context, match);
-    }
-    return ListTile(title: Text(widget.sportName));
-  }
-
-  // --- WIDGETS FOR DIFFERENT CARD TYPES ---
 
   Widget _buildUpcomingMatchContent(BuildContext context, UpcomingMatch match) {
     return Row(
@@ -276,27 +313,20 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (match.teamA != null && match.teamB != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(match.teamA!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2.0),
-                        child: Text('vs', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      ),
-                    ),
-                    Text(match.teamB!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                )
-              else
-                Text(match.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              
+              Text(match.teamA ?? 'Team A',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2.0),
+                child: Text('vs',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+              ),
+              Text(match.teamB ?? 'Team B',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 4),
-              Text(match.venue, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+              Text(match.venue,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700])),
             ],
           ),
         ),
@@ -304,7 +334,10 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(match.date, style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+            Text(match.date,
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor)),
             Text(match.time, style: TextStyle(color: Colors.grey[700])),
           ],
         )
@@ -312,8 +345,52 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
     );
   }
 
+  Widget _buildCardHeader(BuildContext context, String category) {
+    Color headerColor;
+    Color textColor;
+
+    switch (category) {
+      case 'Live':
+        headerColor = Colors.red.shade100;
+        textColor = Colors.red.shade800;
+        break;
+      case 'Upcoming':
+        headerColor = Colors.blue.shade100;
+        textColor = Colors.blue.shade800;
+        break;
+      default:
+        headerColor = Colors.grey.shade200;
+        textColor = Colors.grey.shade700;
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          '${widget.sportName} • League',
+          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: headerColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            category.toUpperCase(),
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 10,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLiveMatchContent(BuildContext context, LiveMatch match) {
-     return Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildTeamRow(context, match.teamA, match.score),
@@ -324,12 +401,15 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
         const SizedBox(height: 12),
         Text(
           match.status,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+          style: TextStyle(
+              color: Theme.of(context).primaryColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 14),
         ),
       ],
     );
   }
-  
+
   Widget _buildTeamMatchContent(BuildContext context, TeamMatchResult match) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,167 +420,36 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
         const SizedBox(height: 12),
         Text(
           match.result,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        if (match.highlights.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ...match.highlights.map((h) => Text(
-            h, 
-            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontStyle: h.contains(':') ? FontStyle.normal : FontStyle.italic)
-          ))
-        ]
-      ],
-    );
-  }
-
-  Widget _buildPlayerMatchContent(BuildContext context, PlayerMatchResult pMatch) {
-     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildPlayerRow(context, pMatch.playerA, pMatch.playerB),
-        const SizedBox(height: 8),
-        Text(
-          'Game Scores: ${pMatch.gameScores.join(" / ")}',
-          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          pMatch.result,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+          style: TextStyle(
+              color: Theme.of(context).primaryColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 14),
         ),
       ],
     );
   }
 
-  Widget _buildAthleticsContent(BuildContext context, AthleticsResult result) {
-    final podiumIcons = [Icons.looks_one, Icons.looks_two, Icons.looks_3];
-    final podiumColors = [Colors.amber.shade700, Colors.grey.shade500, Colors.brown.shade400];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          result.event,
-          style: TextStyle(fontSize: 14, color: Colors.grey[700], fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ...result.podium.asMap().entries.map((entry) {
-          final pos = entry.value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Row(
-              children: [
-                Icon(podiumIcons[entry.key], color: podiumColors[entry.key], size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('${pos['athlete']}', style: const TextStyle(fontSize: 16))),
-                Text('${pos['time']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-          );
-        }),
-        const SizedBox(height: 12),
-        Text(
-          'Winner: ${result.winner}',
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVolleyballContent(BuildContext context, VolleyballMatchResult match) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTeamRow(context, match.teamA, match.setScores.where((s) => int.parse(s.split('-')[0]) > int.parse(s.split('-')[1])).length.toString()),
-        const SizedBox(height: 8),
-        _buildTeamRow(context, match.teamB, match.setScores.where((s) => int.parse(s.split('-')[1]) > int.parse(s.split('-')[0])).length.toString()),
-        const SizedBox(height: 12),
-         Text('Set Scores: ${match.setScores.join(" | ")}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-         const SizedBox(height: 8),
-        Text(
-          match.result,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        const SizedBox(height: 8),
-        Text(match.bestPlayer, style: TextStyle(color: Colors.grey[700], fontStyle: FontStyle.italic, fontSize: 12)),
-      ],
-    );
-  }
-  
-  Widget _buildChessContent(BuildContext context, ChessMatchResult match) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTeamRow(context, match.teamA, "1.5"),
-        const SizedBox(height: 8),
-        _buildTeamRow(context, match.teamB, "1.5"),
-        const SizedBox(height: 12),
-        ...match.boardResults.asMap().entries.map((entry) {
-          final board = entry.value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Text(
-              'Board ${entry.key + 1}: ${board['playerWhite']} vs ${board['playerBlack']} (${board['result']})',
-              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-            ),
-          );
-        }),
-        const SizedBox(height: 12),
-        Text(
-          match.result,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-      ],
-    );
-  }
-  
-   Widget _buildCarromContent(BuildContext context, CarromMatchResult match) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildPlayerRow(context, match.playerA, match.playerB),
-        const SizedBox(height: 8),
-        ...match.roundScores.asMap().entries.map((entry) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2.0),
-          child: Text(
-            'Round ${entry.key + 1}: ${entry.value}',
-            style: TextStyle(fontSize: 12, color: Colors.grey[700])
-          ),
-        )),
-        const SizedBox(height: 12),
-        Text(
-          match.result,
-          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-      ],
-    );
-  }
-  
   Widget _buildTeamRow(BuildContext context, String name, String score) {
     return Row(
       children: [
         CircleAvatar(
           radius: 12,
-          backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-          child: Text(name.substring(0, 1), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+          backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
+          child: Text(name.substring(0, 1),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor)),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-        Text(score, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-      ],
-    );
-  }
-
-  Widget _buildPlayerRow(BuildContext context, String playerA, String playerB) {
-     return Row(
-      children: [
-        const Icon(Icons.person_outline, color: Colors.grey, size: 20),
-        const SizedBox(width: 8),
-        Text(playerA, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text("vs", style: TextStyle(color: Colors.grey)),
-        ),
-        Text(playerB, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Expanded(
+            child: Text(name,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16))),
+        Text(score,
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Theme.of(context).colorScheme.secondary)),
       ],
     );
   }
@@ -513,76 +462,19 @@ class _SportsDetailsViewState extends State<_SportsDetailsView> with SingleTicke
           Navigator.of(context).pop();
         } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
-        } else {
-          // Handle navigation to Schedule/Leaderboard if needed.
         }
       },
       items: [
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        const BottomNavigationBarItem(icon: Icon(Icons.schedule), label: 'Schedule'),
-        const BottomNavigationBarItem(icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.schedule), label: 'Schedule'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
         BottomNavigationBarItem(
           icon: Icon(widget.isForBoys ? Icons.male : Icons.female),
           label: widget.isForBoys ? 'Boys' : 'Girls',
         ),
       ],
-    );
-  }
-}
-
-
-// --- Animation Widget ---
-class FadeInAnimation extends StatefulWidget {
-  final Widget child;
-  final Duration delay;
-  
-  const FadeInAnimation({super.key, required this.child, this.delay = Duration.zero});
-
-  @override
-  State<FadeInAnimation> createState() => _FadeInAnimationState();
-}
-
-class _FadeInAnimationState extends State<FadeInAnimation> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacityAnimation;
-  late final Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-
-    Future.delayed(widget.delay, () {
-      if (mounted) {
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacityAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: widget.child,
-      ),
     );
   }
 }

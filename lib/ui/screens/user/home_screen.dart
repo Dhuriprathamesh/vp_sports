@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../../../core/app_theme.dart';
 import 'sports_details.dart'; // Import the new screen
+import 'leaderboard_screen.dart'; // Import the leaderboard screen
 
 // The main screen of the application.
 class HomeScreen extends StatelessWidget {
@@ -168,7 +169,7 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
         _buildProfileIcon(context),
       ],
       // This is false by default when a leading widget is present.
-      centerTitle: true, 
+      centerTitle: false, 
     );
   }
 
@@ -505,7 +506,23 @@ class _HomeScreenViewState extends State<_HomeScreenView> with TickerProviderSta
     return BottomNavigationBar(
       currentIndex: _bottomNavIndex,
       onTap: (index) {
-        if (index == 3) {
+        if (index == 2) { // Leaderboard is at index 2
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => LeaderboardScreen(isForBoys: widget.isForBoys),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                const begin = Offset(0.0, 1.0);
+                const end = Offset.zero;
+                const curve = Curves.ease;
+                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                return SlideTransition(
+                  position: animation.drive(tween),
+                  child: child,
+                );
+              },
+            ),
+          );
+        } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
         } else {
           setState(() { _bottomNavIndex = index; });
@@ -596,3 +613,4 @@ class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderSt
     );
   }
 }
+

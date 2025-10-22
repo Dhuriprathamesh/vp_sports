@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import 'admin_sports_details.dart'; // Navigate to the admin sports details screen
+import 'admin_sports_details.dart'; 
+import 'admin_leaderboard.dart';
 
 // The main screen of the application for the Admin.
 class AdminHomeScreen extends StatelessWidget {
@@ -158,7 +159,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
       actions: [
         _buildProfileIcon(context),
       ],
-      centerTitle: true, 
+      centerTitle: false, 
     );
   }
 
@@ -479,7 +480,26 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     return BottomNavigationBar(
       currentIndex: _bottomNavIndex,
       onTap: (index) {
-        if (index == 3) {
+        if (index == 2) { // Leaderboard is at index 2
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => AdminLeaderboardScreen(
+                isForBoys: widget.isForBoys,
+                onGenderToggle: widget.onGenderToggle,
+              ),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                const begin = Offset(0.0, 1.0);
+                const end = Offset.zero;
+                const curve = Curves.ease;
+                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                return SlideTransition(
+                  position: animation.drive(tween),
+                  child: child,
+                );
+              },
+            ),
+          );
+        } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
         } else {
           setState(() { _bottomNavIndex = index; });
@@ -570,3 +590,4 @@ class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderSt
     );
   }
 }
+

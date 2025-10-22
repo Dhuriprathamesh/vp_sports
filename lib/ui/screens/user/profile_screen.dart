@@ -16,16 +16,16 @@ class ProfileScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Profile Info
-            Row(
+            const Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 35,
                   backgroundImage: AssetImage("lib/assets/images/avatar.png"), // placeholder
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text("Prathamesh Dhuri", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     Text("Class: CO3KA"),
                     Text("Roll No: 45"),

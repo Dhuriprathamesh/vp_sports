@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AddMatchScreen extends StatefulWidget {
   final String sportName;
@@ -13,18 +17,28 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   final _formKey = GlobalKey<FormState>();
   int _currentPage = 0;
   double _navigationDirection = 1.0;
+  bool _isLoading = false;
 
-  // --- Controllers for Form Data ---
   late final TextEditingController _teamANameController;
   late final TextEditingController _teamBNameController;
   late final List<TextEditingController> _teamAPlayerControllers;
   late final List<TextEditingController> _teamBPlayerControllers;
+  late final TextEditingController _oversController;
+  late final TextEditingController _venueController;
+  late final TextEditingController _startTimeController;
+  late final TextEditingController _umpiresController;
 
   @override
   void initState() {
     super.initState();
     _teamANameController = TextEditingController();
     _teamBNameController = TextEditingController();
+    _oversController = TextEditingController();
+    _venueController = TextEditingController();
+    // Set a default time for user convenience
+    _startTimeController = TextEditingController(
+        text: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now().add(const Duration(days: 1))));
+    _umpiresController = TextEditingController();
 
     final playerCounts = _getSportPlayerCounts(widget.sportName);
     final totalPlayers = playerCounts['players']! + playerCounts['subs']!;
@@ -38,6 +52,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   void dispose() {
     _teamANameController.dispose();
     _teamBNameController.dispose();
+    _oversController.dispose();
+    _venueController.dispose();
+    _startTimeController.dispose();
+    _umpiresController.dispose();
     for (var controller in _teamAPlayerControllers) {
       controller.dispose();
     }
@@ -46,11 +64,85 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     }
     super.dispose();
   }
+  
+  Future<void> _saveMatch() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+
+    final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    final sportNameUrl = widget.sportName.toLowerCase();
+    final String apiUrl = 'http://$host:5000/api/add_${sportNameUrl}_match';
+    
+    try {
+      final List<String> teamAPlayers = _teamAPlayerControllers
+          .map((c) => c.text)
+          .where((name) => name.isNotEmpty)
+          .toList();
+
+      final List<String> teamBPlayers = _teamBPlayerControllers
+          .map((c) => c.text)
+          .where((name) => name.isNotEmpty)
+          .toList();
+      
+      final List<String> umpires = _umpiresController.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+      final Map<String, dynamic> matchData = {
+        'team_a_name': _teamANameController.text,
+        'team_b_name': _teamBNameController.text,
+        'team_a_players': teamAPlayers,
+        'team_b_players': teamBPlayers,
+        'overs': _oversController.text,
+        'start_time': _startTimeController.text,
+        'venue': _venueController.text,
+        'umpires': umpires,
+      };
+
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: json.encode(matchData),
+      );
+
+      if (mounted) {
+          if (response.statusCode == 201) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Match added successfully!'), backgroundColor: Colors.green),
+            );
+            // MODIFIED: Pop with a 'true' result to signal success
+            Navigator.of(context).pop(true);
+          } else {
+            final responseBody = json.decode(response.body);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${responseBody['message']}'), backgroundColor: Colors.red),
+            );
+          }
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to connect to server: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding:
+       insetPadding:
           const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
@@ -103,8 +195,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
-  // --- WIDGET BUILDERS ---
-
   Widget _getCurrentPage() {
     switch (_currentPage) {
       case 0:
@@ -156,7 +246,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           Stack(
             alignment: Alignment.center,
             children: [
-              // Background Line
               Container(
                 height: 4,
                 margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -165,7 +254,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Progress Line
               Align(
                 alignment: Alignment.centerLeft,
                 child: AnimatedContainer(
@@ -180,7 +268,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                   ),
                 ),
               ),
-              // Circles
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(titles.length, (index) {
@@ -225,7 +312,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          // Labels
           Row(
             children: List.generate(titles.length, (index) {
               final bool isActive = index <= _currentPage;
@@ -294,6 +380,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         controller: controllers[index],
         label: label,
         icon: Icons.person_outline,
+        isRequired: false,
       );
     });
   }
@@ -320,102 +407,30 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         return [
           _buildResponsiveFormFieldRow(
             _buildTextFormField(
-                label: 'Overs', icon: Icons.sports_cricket_outlined),
+                controller: _oversController,
+                label: 'Overs', icon: Icons.sports_cricket_outlined, keyboardType: TextInputType.number),
             _buildTextFormField(
+                controller: _venueController,
                 label: 'Venue', icon: Icons.location_on_outlined),
           ),
           _buildTextFormField(
-              label: 'Start Time', icon: Icons.schedule_outlined),
-          _buildTextFormField(label: 'Umpire(s)', icon: Icons.sports),
-        ];
-      case 'Football':
-        return [
-          _buildResponsiveFormFieldRow(
-            _buildTextFormField(label: 'Duration', icon: Icons.timer_outlined),
-            _buildTextFormField(
-                label: 'Venue', icon: Icons.location_on_outlined),
-          ),
+              controller: _startTimeController,
+              label: 'Start Time (YYYY-MM-DD HH:MM:SS)', icon: Icons.schedule_outlined),
           _buildTextFormField(
-              label: 'Start Time', icon: Icons.schedule_outlined),
-          _buildTextFormField(label: 'Referee(s)', icon: Icons.sports),
-        ];
-      case 'Kabaddi':
-        return [
-          _buildResponsiveFormFieldRow(
-            _buildTextFormField(label: 'Duration', icon: Icons.timer_outlined),
-            _buildTextFormField(
-                label: 'Venue', icon: Icons.location_on_outlined),
-          ),
-          _buildTextFormField(
-              label: 'Start Time', icon: Icons.schedule_outlined),
-          _buildTextFormField(
-              label: 'Referee / Officials', icon: Icons.sports),
-        ];
-      case 'Volleyball':
-        return [
-          _buildResponsiveFormFieldRow(
-            _buildDropdownFormField(
-                label: 'Format',
-                items: ['Best of 3', 'Best of 5'],
-                icon: Icons.format_list_numbered),
-            _buildTextFormField(
-                label: 'Venue', icon: Icons.location_on_outlined),
-          ),
-          _buildTextFormField(
-              label: 'Start Time', icon: Icons.schedule_outlined),
-          _buildTextFormField(
-              label: 'Referee / Line Judges', icon: Icons.sports),
-        ];
-      case 'Athletics':
-        return [
-          _buildTextFormField(
-              label: 'Event Name', icon: Icons.emoji_events_outlined),
-          _buildResponsiveFormFieldRow(
-            _buildTextFormField(
-                label: 'Start Time', icon: Icons.schedule_outlined),
-            _buildTextFormField(
-                label: 'Venue', icon: Icons.location_on_outlined),
-          ),
-          _buildTextFormField(
-              label: 'Official / Timekeeper', icon: Icons.sports),
-        ];
-      case 'Table Tennis':
-      case 'Badminton':
-      case 'Carrom':
-        return [
-          _buildResponsiveFormFieldRow(
-              _buildDropdownFormField(
-                  label: 'Match Type',
-                  items: ['Singles', 'Doubles'],
-                  icon: Icons.person_outline),
-              _buildDropdownFormField(
-                  label: 'Format',
-                  items: ['Best of 3', 'Best of 5', 'Best of 7'],
-                  icon: Icons.format_list_numbered)),
-          _buildResponsiveFormFieldRow(
-              _buildTextFormField(
-                  label: 'Start Time', icon: Icons.schedule_outlined),
-              _buildTextFormField(
-                  label: 'Venue', icon: Icons.location_on_outlined)),
-          _buildTextFormField(label: 'Umpire / Official', icon: Icons.sports),
-        ];
-      case 'Chess':
-        return [
-          _buildResponsiveFormFieldRow(
-            _buildDropdownFormField(
-                label: 'Time Control',
-                items: ['Blitz', 'Rapid', 'Classical'],
-                icon: Icons.timer_outlined),
-            _buildTextFormField(
-                label: 'Venue', icon: Icons.location_on_outlined),
-          ),
-          _buildTextFormField(
-              label: 'Start Time', icon: Icons.schedule_outlined),
-          _buildTextFormField(
-              label: 'Arbiter / Match Official', icon: Icons.sports),
+              controller: _umpiresController,
+              label: 'Umpire(s) (comma-separated)', icon: Icons.sports),
         ];
       default:
-        return [_buildTextFormField(label: 'Match Details')];
+        return [
+          _buildTextFormField(
+            label: 'Venue',
+            controller: _venueController,
+            icon: Icons.location_on_outlined,
+          ),
+           _buildTextFormField(
+              controller: _startTimeController,
+              label: 'Start Time (YYYY-MM-DD HH:MM:SS)', icon: Icons.schedule_outlined),
+        ];
     }
   }
 
@@ -427,7 +442,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           TextButton.icon(
             icon: const Icon(Icons.arrow_back),
             label: const Text('Back'),
-            onPressed: () {
+            onPressed: _isLoading ? null : () {
               setState(() {
                 _navigationDirection = -1.0;
                 _currentPage--;
@@ -436,23 +451,20 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           ),
         const Spacer(),
         ElevatedButton.icon(
-          icon: Icon(_currentPage == 2
+          icon: _isLoading 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Icon(_currentPage == 2
               ? Icons.save_alt_outlined
               : Icons.arrow_forward),
           label: Text(_currentPage == 2 ? 'Save Match' : 'Next'),
-          onPressed: () {
+          onPressed: _isLoading ? null : () {
             if (_currentPage < 2) {
               setState(() {
                 _navigationDirection = 1.0;
                 _currentPage++;
               });
             } else {
-              if (_formKey.currentState!.validate()) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Match details saved!')),
-                );
-                Navigator.of(context).pop();
-              }
+              _saveMatch();
             }
           },
           style: ElevatedButton.styleFrom(
@@ -466,25 +478,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
-  // --- GENERIC FORM FIELD & HELPER WIDGETS ---
-
   Map<String, int> _getSportPlayerCounts(String sportName) {
     switch (sportName) {
       case 'Cricket':
-        return {'players': 11, 'subs': 1};
-      case 'Football':
-        return {'players': 11, 'subs': 5};
-      case 'Kabaddi':
-        return {'players': 7, 'subs': 3};
-      case 'Volleyball':
-        return {'players': 6, 'subs': 2};
-      case 'Table Tennis':
-      case 'Badminton':
-      case 'Carrom':
-      case 'Chess':
-        return {'players': 5, 'subs': 0};
+        return {'players': 11, 'subs': 4};
       default:
-        return {'players': 1, 'subs': 0}; // Default for Athletics etc.
+        return {'players': 11, 'subs': 4};
     }
   }
 
@@ -523,11 +522,15 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   Widget _buildTextFormField(
       {required String label,
       IconData? icon,
-      TextEditingController? controller}) {
+      TextEditingController? controller,
+      TextInputType? keyboardType,
+      bool isRequired = true,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
         controller: controller,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon:
@@ -550,50 +553,17 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           filled: true,
           fillColor: Colors.grey.shade50,
         ),
-        validator: (value) => (value?.isEmpty ?? true) ? 'Required' : null,
-      ),
-    );
-  }
-
-  Widget _buildDropdownFormField(
-      {required String label, required List<String> items, IconData? icon}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: DropdownButtonFormField<String>(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon:
-              icon != null ? Icon(icon, color: Colors.grey[600], size: 20) : null,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide:
-                BorderSide(color: Theme.of(context).primaryColor, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.grey.shade50,
-        ),
-        items: items
-            .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-            .toList(),
-        onChanged: (value) {},
-        validator: (value) => value == null ? 'Required' : null,
+        validator: (value) {
+          if (isRequired && (value?.isEmpty ?? true)) {
+            return 'This field is required';
+          }
+          return null;
+        }
       ),
     );
   }
 }
 
-
-/// A widget that animates its children with a staggered fade and slide effect.
 class _AnimatedColumn extends StatefulWidget {
   final List<Widget> children;
   const _AnimatedColumn({super.key, required this.children});
