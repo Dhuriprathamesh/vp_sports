@@ -58,11 +58,11 @@ def add_cricket_match():
         conn = get_db_connection()
         if conn is None:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
-        
+
         cur = conn.cursor()
         insert_query = """
         INSERT INTO cricket_match (
-            team_a_name, team_b_name, team_a_players, team_b_players, 
+            team_a_name, team_b_name, team_a_players, team_b_players,
             overs_per_innings, start_time, venue, umpires, match_status
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming');
         """
@@ -88,35 +88,35 @@ def get_matches(sport_name):
     status = request.args.get('status', 'upcoming')
 
     if sport_name.lower() != 'cricket':
-        return jsonify([]) 
-    
+        return jsonify([])
+
     matches = []
     conn = get_db_connection()
     if conn is None:
         return jsonify({"status": "error", "message": "Database connection failed"}), 500
-        
+
     try:
         cur = conn.cursor()
-        
+
         # MODIFIED: Changed 'id' to 'match_id' to match your database schema
         if status == 'live':
             query = """
-            SELECT match_id, team_a_name, team_b_name, venue, start_time 
-            FROM cricket_match 
-            WHERE match_status = 'live' 
+            SELECT match_id, team_a_name, team_b_name, venue, start_time
+            FROM cricket_match
+            WHERE match_status = 'live'
             ORDER BY start_time ASC;
             """
         else: # Default to upcoming
             query = """
-            SELECT match_id, team_a_name, team_b_name, venue, start_time 
-            FROM cricket_match 
+            SELECT match_id, team_a_name, team_b_name, venue, start_time
+            FROM cricket_match
             WHERE match_status = 'upcoming' AND start_time > NOW()
             ORDER BY start_time ASC;
             """
-            
+
         cur.execute(query)
         match_rows = cur.fetchall()
-        
+
         cur.close()
         conn.close()
 
@@ -129,7 +129,7 @@ def get_matches(sport_name):
                 "date": row[4].strftime('%b %d'),
                 "time": row[4].strftime('%I:%M %p'),
             })
-            
+
         return jsonify(matches)
 
     except (Exception, psycopg2.Error) as e:
@@ -142,7 +142,7 @@ def get_match_details(match_id):
         conn = get_db_connection()
         if conn is None:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
-        
+
         cur = conn.cursor()
         # MODIFIED: Changed 'id' to 'match_id'
         query = "SELECT * FROM cricket_match WHERE match_id = %s;"
@@ -153,7 +153,7 @@ def get_match_details(match_id):
 
         if not match:
             return jsonify({"status": "error", "message": "Match not found"}), 404
-        
+
         # MODIFIED: Correctly map the columns from your screenshot
         match_details = {
             "id": match[0],
@@ -190,7 +190,7 @@ def start_match(match_id):
             cur.close()
             conn.close()
             return jsonify({"status": "error", "message": "Match not found or already live"}), 404
-        
+
         cur.close()
         conn.close()
         return jsonify({"status": "success", "message": "Match started successfully"}), 200
@@ -199,7 +199,62 @@ def start_match(match_id):
         print(f"Error starting match: {e}")
         return jsonify({"status": "error", "message": f"An error occurred: {str(e)}"}), 500
 
+@app.route('/api/get_live_score/<int:match_id>', methods=['GET'])
+def get_live_score(match_id):
+    """
+    API endpoint to fetch live score data for a specific match.
+    NOTE: This returns INITIAL MOCKED data until actual scoring begins.
+    In a real app, you'd check if scoring has started and return real data if it has.
+    """
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"status": "error", "message": "Database connection failed"}), 500
+
+        cur = conn.cursor()
+        query = "SELECT team_a_name, team_b_name FROM cricket_match WHERE match_id = %s AND match_status = 'live';"
+        cur.execute(query, (match_id,))
+        match = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not match:
+            return jsonify({"status": "error", "message": "Match not found or is not live"}), 404
+
+        # --- INITIAL MOCKED DATA (Pre-Toss/Pre-Start) ---
+        initial_score_data = {
+            "match_id": match_id,
+            "team_a_score": "0/0",       # MODIFIED
+            "team_a_overs": "(0.0)",      # MODIFIED
+            "team_b_score": "0/0",       # MODIFIED
+            "team_b_overs": "(0.0)",      # MODIFIED
+            "match_status_text": "Live", # Keep as Live since the match *is* marked live
+            "summary_text": "Toss will happen soon.", # MODIFIED
+            "batting_team_name": None,    # MODIFIED (or remove)
+            "bowling_team_name": None,    # MODIFIED (or remove)
+            "batsman_on_strike_name": "N/A", # MODIFIED
+            "batsman_on_strike_score": "-",  # MODIFIED
+            "batsman_off_strike_name": "N/A",# MODIFIED
+            "batsman_off_strike_score": "-", # MODIFIED
+            "bowler_on_strike_name": "N/A",  # MODIFIED
+            "bowler_on_strike_figures": "-", # MODIFIED
+            "bowler_off_strike_name": "N/A", # MODIFIED
+            "bowler_off_strike_figures": "-" # MODIFIED
+            # Add a flag later to indicate if actual scoring has started, e.g., "scoring_started": False
+        }
+        # --- END INITIAL MOCKED DATA ---
+
+        # In a real scenario:
+        # 1. Check if scoring data exists for this match_id in scoring tables.
+        # 2. If yes, fetch and return the REAL live score data.
+        # 3. If no, return the initial_score_data.
+
+        return jsonify(initial_score_data), 200
+
+    except (Exception, psycopg2.Error) as e:
+        print(f"Error fetching live score: {e}")
+        return jsonify({"status": "error", "message": f"An error occurred: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-

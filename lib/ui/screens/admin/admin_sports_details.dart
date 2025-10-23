@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/app_theme.dart';
 import '../../../data/mock_data.dart';
 import 'add_match.dart';
-import '../user/match_details_screen.dart'; 
+import '../user/match_details_screen.dart';
+import '../common/live_cricket_score_screen.dart'; // IMPORT ADDED
 
 class AdminSportsDetailsScreen extends StatefulWidget {
   final String sportName;
@@ -30,7 +31,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  List<LiveMatch> _liveMatches = [];
+  List<UpcomingMatch> _liveMatches = []; // MODIFIED TYPE
   List<MatchResult> _recentMatches = [];
   List<UpcomingMatch> _upcomingMatches = [];
   bool _isLoading = true;
@@ -62,15 +63,19 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
       if (mounted) {
         if (response.statusCode == 200) {
           final List<dynamic> data = json.decode(response.body);
-          
+
           if (status == 'live') {
-            final List<LiveMatch> fetchedMatches =
-                data.map<LiveMatch>((json) {
-              return LiveMatch(
+            // MODIFIED: Create UpcomingMatch objects to store id, teamA, teamB
+            final List<UpcomingMatch> fetchedMatches =
+                data.map<UpcomingMatch>((json) {
+              return UpcomingMatch(
+                id: json['id'],
+                title: '${widget.sportName} Match', // Title is required
                 teamA: json['teamA'],
                 teamB: json['teamB'],
-                score: "0/0", // Placeholder
-                status: "Match is live",
+                venue: json['venue'], // Venue is required
+                date: json['date'], // Date is required
+                time: json['time'], // Time is required
               );
             }).toList();
              setState(() => _liveMatches = fetchedMatches);
@@ -118,7 +123,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     _fetchMatches('live');
     _fetchMatches('upcoming');
     _recentMatches = []; // Clear mock data
-    
+
     if(_liveMatches.isNotEmpty) {
       _tabController.index = 0;
     } else {
@@ -156,7 +161,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildMatchList(context, 'Live', _liveMatches),
+                  _buildMatchList(context, 'Live', _liveMatches), // MODIFIED
                   _buildMatchList(context, 'Recent', _recentMatches),
                   _buildUpcomingMatchList(context),
                 ],
@@ -173,7 +178,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
           );
 
           if (matchAdded == true) {
-            _loadAllMatches(); 
+            _loadAllMatches();
             _tabController.animateTo(2);
           }
         },
@@ -278,7 +283,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
       ),
     );
   }
-  
+
   Widget _buildEmptyList(String category) {
     return Center(
         child: Column(
@@ -306,7 +311,28 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
       itemCount: matches.length,
       itemBuilder: (context, index) {
         final match = matches[index];
-        return _buildMatchCard(context, match, category);
+        // MODIFIED: Wrap card in GestureDetector for tap handling
+        return GestureDetector(
+          onTap: () {
+            if (category == 'Live' && match is UpcomingMatch) {
+              // Navigate to Live Score Screen
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => LiveCricketScoreScreen(
+                    matchId: match.id,
+                    sportName: widget.sportName,
+                    teamAName: match.teamA ?? 'Team A',
+                    teamBName: match.teamB ?? 'Team B',
+                    isForBoys: widget.isForBoys,
+                    onGenderToggle: widget.onGenderToggle,
+                    isAdmin: true, // This is the admin screen
+                  ),
+                ),
+              );
+            }
+          },
+          child: _buildMatchCard(context, match, category),
+        );
       },
     );
   }
@@ -324,20 +350,60 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
           children: [
             _buildCardHeader(context, category),
             const SizedBox(height: 12),
-            if (match is UpcomingMatch) _buildUpcomingMatchContent(context, match),
-            if (match is LiveMatch) _buildLiveMatchContent(context, match),
+            if (match is UpcomingMatch && category == 'Upcoming') _buildUpcomingMatchContent(context, match),
+            // MODIFIED: Use _buildLiveMatchContent for Live category matches (which are UpcomingMatch type)
+            if (match is UpcomingMatch && category == 'Live') _buildLiveMatchContent(context, match),
+            // Remove the LiveMatch specific check as it's handled above
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildLiveMatchContent(BuildContext context, LiveMatch match) {
-    return Row(
+
+  // MODIFIED: Changed parameter type and content to match admin_home.dart style
+  Widget _buildLiveMatchContent(BuildContext context, UpcomingMatch match) {
+    // Using placeholder data similar to admin_home.dart
+    String scoreA = "0/0"; // Placeholder
+    String scoreB = "0/0"; // Placeholder
+    String summary = "Match is live."; // Placeholder
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(widget.sportIcon, color: Colors.red.shade700, size: 40),
-        const SizedBox(width: 16),
-        Expanded(child: Text("${match.teamA} vs ${match.teamB}")),
+        // Middle Section: Teams and Scores
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(
+             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Team Names Column
+              Column(
+                 crossAxisAlignment: CrossAxisAlignment.start,
+                 children: [
+                   Text(match.teamA ?? 'Team A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                   const SizedBox(height: 8),
+                   Text(match.teamB ?? 'Team B', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              // Scores Column
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(scoreA, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                   const SizedBox(height: 8),
+                  Text(scoreB, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                ],
+              ),
+            ],
+          ),
+        ),
+         const SizedBox(height: 8), // Space before summary
+
+        // Bottom Section: Summary
+        Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(summary, style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
+        ),
       ],
     );
   }
@@ -452,4 +518,3 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     );
   }
 }
-

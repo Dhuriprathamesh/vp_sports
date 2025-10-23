@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import 'admin_sports_details.dart'; 
+import 'admin_sports_details.dart';
 import 'admin_leaderboard.dart';
 
 // The main screen of the application for the Admin.
@@ -27,7 +27,7 @@ class AdminHomeScreen extends StatelessWidget {
 class _AdminHomeScreenView extends StatefulWidget {
   final bool isForBoys;
   final Function(bool) onGenderToggle;
-  
+
   const _AdminHomeScreenView({
     required this.isForBoys,
     required this.onGenderToggle,
@@ -40,13 +40,13 @@ class _AdminHomeScreenView extends StatefulWidget {
 class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerProviderStateMixin {
   int _bottomNavIndex = 0;
   bool _isProfileMenuOpen = false;
-  
+
   // State to track which sports category is currently visible.
   String _selectedSportsCategory = 'Outdoor';
 
   late final ScrollController _scrollController;
   double _parallaxOffset = 0.0;
-  
+
   // --- Animation Properties for the Profile Menu ---
   late final AnimationController _profileMenuController;
   late final Animation<Offset> _profileMenuSlideAnimation;
@@ -92,7 +92,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     _profileMenuController.dispose();
     super.dispose();
   }
-  
+
   void _toggleProfileMenu() {
     setState(() {
       _isProfileMenuOpen = !_isProfileMenuOpen;
@@ -159,7 +159,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
       actions: [
         _buildProfileIcon(context),
       ],
-      centerTitle: false, 
+      centerTitle: false,
     );
   }
 
@@ -179,7 +179,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
 
   Widget _buildAnimatedProfileMenu() {
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     return Positioned(
       right: 16,
       top: 60,
@@ -224,8 +224,8 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           SnackBar(content: Text('Selected: $title')),
         );
       },
-      borderRadius: title == 'My Account' 
-        ? const BorderRadius.vertical(top: Radius.circular(12)) 
+      borderRadius: title == 'My Account'
+        ? const BorderRadius.vertical(top: Radius.circular(12))
         : title == 'Log Out'
         ? const BorderRadius.vertical(bottom: Radius.circular(12))
         : BorderRadius.zero,
@@ -251,7 +251,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
         children: [
           _buildLiveMatchesSection(context),
           _buildCategoryToggle(context),
-          
+
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 400),
             transitionBuilder: (Widget child, Animation<double> animation) {
@@ -333,6 +333,15 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
   }
 
   Widget _buildLiveMatchesSection(BuildContext context) {
+    // Assuming you have a list of live matches data
+    // List<Map<String, dynamic>> liveMatches = fetchLiveMatches(); // Replace with your data fetching
+     List<Map<String, dynamic>> liveMatches = [ // Using dummy data for layout
+        {'title': 'Cricket • T20 Match 1', 'teamA': 'TEAM A', 'teamB': 'TEAM B', 'scoreA': '172/5', 'scoreB': '140/8', 'summary': 'Team A leads by 32 runs.'},
+        {'title': 'Cricket • T20 Match 2', 'teamA': 'TEAM C', 'teamB': 'TEAM D', 'scoreA': '155/6', 'scoreB': '156/4', 'summary': 'Team D won by 6 wickets.'},
+        {'title': 'Football • League Final', 'teamA': 'TEAM X', 'teamB': 'TEAM Y', 'scoreA': '2', 'scoreB': '1', 'summary': 'Halftime'},
+     ];
+
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -344,17 +353,19 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           ),
         ),
         SizedBox(
-          height: 160,
+          height: 160, // Adjusted height slightly if needed
           child: Transform.translate(
             offset: Offset(-_parallaxOffset, 0),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: 12 + _parallaxOffset),
-              itemCount: 5,
+              itemCount: liveMatches.length, // Use the length of your data
               itemBuilder: (context, index) {
+                 final matchData = liveMatches[index]; // Get data for the current card
                 return FadeInAnimation(
                   delay: Duration(milliseconds: 100 + index * 50),
-                  child: _buildLiveMatchCard(context, index),
+                  // Pass the actual match data to the card builder
+                  child: _buildLiveMatchCard(context, matchData),
                 );
               },
             ),
@@ -363,8 +374,9 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
       ],
     );
   }
-  
-  Widget _buildLiveMatchCard(BuildContext context, int index) {
+
+  // MODIFIED: Accepts matchData map
+  Widget _buildLiveMatchCard(BuildContext context, Map<String, dynamic> matchData) {
       return Card(
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.2),
@@ -376,10 +388,11 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Top Row: Title and Live Tag
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Cricket • T20 Match ${index + 1}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                  Text(matchData['title'] ?? 'Live Match', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(20)),
@@ -387,30 +400,48 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
                   )
                 ],
               ),
-              const Spacer(),
-              Row(
-                children: [
-                  const Text('TEAM A', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Spacer(),
-                  Text('172/5', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-                ],
+              const Spacer(flex: 2), // Add more space before scores
+
+              // Middle Section: Teams and Scores
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0), // Padding around the scores row
+                child: Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween, // Push scores to the right
+                  children: [
+                    // Team Names Column
+                    Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         Text(matchData['teamA'] ?? 'Team A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                         const SizedBox(height: 8),
+                         Text(matchData['teamB'] ?? 'Team B', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    // Scores Column
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(matchData['scoreA'] ?? '-', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                         const SizedBox(height: 8),
+                        Text(matchData['scoreB'] ?? '-', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('TEAM B', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Spacer(),
-                  Text('140/8', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-                ],
+               const Spacer(flex: 1), // Space before summary
+
+              // Bottom Section: Summary
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0), // Add padding above summary
+                child: Text(matchData['summary'] ?? '-', style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
               ),
-              const Spacer(),
-              Text('Team A leads by 32 runs.', style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
             ],
           ),
         ),
       );
   }
-  
+
   Widget _buildSportsGrid(BuildContext context, { required Key key, required String title, required List<Map<String, dynamic>> sports, required Color iconColor }) {
     return Padding(
       key: key,
@@ -439,12 +470,12 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
       ),
     );
   }
-  
+
   Widget _buildSportCard(BuildContext context, {String? name, IconData? icon, required Color iconColor}) {
     if (name == null || icon == null) {
       return const SizedBox.shrink();
     }
-    
+
     return Material(
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.15),
@@ -523,13 +554,13 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
       ],
     );
   }
-  
+
   List<Map<String, dynamic>> _getOutdoorSports() => [
     {'name': 'Cricket', 'icon': Icons.sports_cricket}, {'name': 'Football', 'icon': Icons.sports_soccer},
     {'name': 'Volleyball', 'icon': Icons.sports_volleyball}, {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
     {'name': 'Athletics', 'icon': Icons.directions_run}, {'name': null, 'icon': null},
   ];
-  
+
   List<Map<String, dynamic>> _getIndoorSports() => [
     {'name': 'Chess', 'icon': Icons.gamepad_outlined}, {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
     {'name': 'Carrom', 'icon': Icons.album}, {'name': 'Badminton', 'icon': Icons.sports},
@@ -539,7 +570,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
 class FadeInAnimation extends StatefulWidget {
   final Widget child;
   final Duration delay;
-  
+
   const FadeInAnimation({required this.child, this.delay = Duration.zero, super.key});
 
   @override
@@ -590,4 +621,3 @@ class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderSt
     );
   }
 }
-
