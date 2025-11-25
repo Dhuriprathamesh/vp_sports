@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../../../core/app_theme.dart';
 import 'sports_details.dart'; // Import the new screen
 import 'leaderboard_screen.dart'; // Import the leaderboard screen

@@ -32,7 +32,6 @@ class Player {
   String getBatsmanScore() { return "$runs ($ballsFaced)"; }
 
   // Method to convert Player object to a Map for JSON serialization
-  // --- MODIFICATION: Added currentStriker and currentNonStriker as parameters ---
   Map<String, dynamic> toJson(String currentStatus, Player? currentStriker, Player? currentNonStriker) {
      String status = "Yet to bat";
      // Determine batting status based on current state
@@ -61,7 +60,6 @@ class Player {
        // Maidens not included in JSON currently
      };
    }
-   // --- END MODIFICATION ---
 
    // Optional: Factory constructor to create Player from JSON (useful for loading)
    factory Player.fromJson(Map<String, dynamic> json) {
@@ -99,10 +97,8 @@ enum ExtraType { Wide, NoBall, LegBye, Bye }
 
 class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
-  // --- MODIFICATION: Moved striker/nonStriker back into state class ---
   Player? _striker;
   Player? _nonStriker;
-  // --- END MODIFICATION ---
 
   ScoringPhase _currentPhase = ScoringPhase.preMatch;
   List<Player> _fetchedTeamAPlayers = [];
@@ -115,22 +111,18 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   int _firstInningsValidBallsBowled = 0;
   String _matchStatusText = "Live"; String _summaryText = "Toss will happen soon.";
   String _battingTeamName = ""; String _bowlingTeamName = "";
-  // Player? _striker; // Moved outside class
-  // Player? _nonStriker; // Moved outside class
   Player? _currentBowler;
   List<Player> _dismissedBatsmen = []; List<Player> _bowlersUsed = [];
   int _currentOverNumber = 1; int _currentBallNumberInOver = 1;
-  // int _ballsBowledThisOverRaw = 0; // Removed unused variable
   List<String> _ballsThisOverDisplay = [];
   int _extras = 0; bool _isFirstInnings = true;
   String? _tossWinner; TossDecision? _tossDecision;
   Timer? _debounceTimer; bool _isSaving = false;
   Map<String, dynamic>? _lastSentState;
-  // List<String> _timeline = []; // Removed
   List<String> _team1Timeline = [];
   List<String> _team2Timeline = [];
 
-  bool _isDownloadingPdf = false; // Added for PDF download state
+  bool _isDownloadingPdf = false;
 
   @override
   void initState() { super.initState(); _fetchMatchPlayers(); }
@@ -156,9 +148,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
             _maxOvers = (oversRaw is num) ? oversRaw.toInt() : 20;
             _isLoadingPlayers = false; // Mark as done initially
           });
-          // --- MODIFICATION: Re-enabled call to load live state ---
           await _loadExistingLiveState();
-          // --- END MODIFICATION ---
         } else {
           setState(() { _playerFetchError = 'Failed to load player details (${response.statusCode}).'; _isLoadingPlayers = false; });
         }
@@ -170,7 +160,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
   // Load Existing State from Backend
   Future<void> _loadExistingLiveState() async {
-     // --- MODIFICATION: Re-enabled with JSONB parsing ---
      setState(() => _isLoadingPlayers = true); // Show loading indicator while fetching state
      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
      final String apiUrl = 'http://$host:5000/api/get_live_updates/${widget.matchId}';
@@ -186,10 +175,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                 if (playerId == null) return null;
                 try {
                     if (playerId >= 1000 && playerId < 2000) {
-                        // Use firstWhereOrNull for safety
                         return _fetchedTeamAPlayers.firstWhere((p) => p.id == playerId);
                     } else if (playerId >= 2000 && playerId < 3000) {
-                         // Use firstWhereOrNull for safety
                         return _fetchedTeamBPlayers.firstWhere((p) => p.id == playerId);
                     }
                 } catch (e) { print("Load State Warning: Player ID $playerId not found in fetched lists."); }
@@ -280,16 +267,12 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                     _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                     _currentBallNumberInOver = (currentInningsBalls % 6) + 1;
 
-                    // Handle edge case where over just completed (e.g., 6 balls = start of 2nd over, ball 1)
-                     // A ball count that's a multiple of 6 (and not 0) means the over just finished.
-                     // The *next* ball will be the start of the next over.
                     if (currentInningsBalls > 0 && currentInningsBalls % 6 == 0) {
                          // Over just finished. Next ball is start of new over.
                          _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                          _currentBallNumberInOver = 1;
                           print("Load State: Detected start of new over ($_currentOverNumber) as previous over just finished.");
                          _ballsThisOverDisplay = []; // Clear display for new over
-                         // UI should prompt for bowler if _currentBowler is null here.
                     } else {
                          // Over is in progress
                          _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
@@ -334,6 +317,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
                       String teamToChaseName = (teamBattedFirstName == widget.teamAName) ? widget.teamBName : widget.teamAName;
                       String inningsLimitDisplay = _formatOversLimit(_firstInningsValidBallsBowled);
+                      // --- FIX IS HERE: Use teamToChaseName instead of teamToChase ---
                       _summaryText = "End of 1st Innings. Target for $teamToChaseName: $_targetScore in $inningsLimitDisplay overs";
 
                  } else if (_currentPhase == ScoringPhase.selectPlayers && _tossWinner != null) {
@@ -373,12 +357,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
      } finally {
          if (mounted) setState(() => _isLoadingPlayers = false); // Stop loading indicator
      }
-     // --- END MODIFICATION ---
   }
 
-  // --- Send Score Update to Backend ---
+  // Send Score Update to Backend
   Future<void> _sendScoreUpdateToBackend() async {
-    // --- MODIFICATION: Re-enabled HTTP POST with JSON player data ---
     if (_isSaving) return;
     setState(() => _isSaving = true);
     print("Sending update for phase: $_currentPhase");
@@ -386,12 +368,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     const String host = kIsWeb ? 'localhost' : '10.0.2.2';
     final String apiUrl = 'http://$host:5000/api/update_live_score/${widget.matchId}';
 
-    // --- MODIFICATION: Pass current striker/nonStriker to toJson ---
     List<Map<String, dynamic>> team1BattingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
     List<Map<String, dynamic>> team2BowlingData = _fetchedTeamBPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
     List<Map<String, dynamic>> team2BattingData = _fetchedTeamBPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
     List<Map<String, dynamic>> team1BowlingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
-    // --- END MODIFICATION ---
 
 
     // Determine current extras based on last sent state (or 0 if none)
@@ -422,9 +402,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
         "is_first_innings": _isFirstInnings,
         "target_score": _targetScore > 0 ? _targetScore : null, // Send null if not set
         "first_innings_balls": _firstInningsValidBallsBowled > 0 ? _firstInningsValidBallsBowled : null, // Send null if not set
-        // "timeline": _timeline, // Removed
-        "team1_timeline": _team1Timeline, // Added
-        "team2_timeline": _team2Timeline, // Added
+        "team1_timeline": _team1Timeline,
+        "team2_timeline": _team2Timeline,
         // Send the JSON lists
         "team1_batting": team1BattingData,
         "team2_bowling": team2BowlingData,
@@ -455,12 +434,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     } finally {
         if (mounted) setState(() => _isSaving = false);
     }
-    // --- END MODIFICATION ---
   }
 
  // Debounce function
   void _debounceAndSendUpdate() {
-    // --- MODIFICATION: Re-enabled ---
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 800), () {
         // Only send if not currently saving
@@ -470,13 +447,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
             print("Debouncer skipped send: Already saving.");
         }
     });
-    // Removed direct call: _sendScoreUpdateToBackend();
-    // --- END MODIFICATION ---
  }
-
- // --- NO CHANGES NEEDED below this line for DB connection ---
- // (Logic remains the same, state variables are updated locally,
- //  and _debounceAndSendUpdate handles sending to backend)
 
   // Format overs (e.g., (2.1))
   String _formatOvers(int validBalls) {
@@ -497,7 +468,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   void _handleBallCompletion(String ballOutcomeDisplay, {bool countsAsBall = true, int runsScored = 0, bool isExtra = false, int extraRuns = 0, ExtraType? extraType}) {
       if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return;
       _ballsThisOverDisplay.add(ballOutcomeDisplay);
-      // _timeline.add(ballOutcomeDisplay); // Removed
 
       // Add to correct timeline
       if (_battingTeamName == widget.teamAName) {
@@ -559,7 +529,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
           }
       }
       // If the match ended this ball AND it was the 6th ball, call handleOverComplete with flag
-      else if (matchEndedThisBall && isOverComplete) {
+      else if (isOverComplete) { // FIXED: Removed redundant 'matchEndedThisBall' check
            _handleOverComplete(matchJustEnded: true);
       }
    }
@@ -659,11 +629,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
           case ScoringPhase.selectPlayers: return _buildPlayerSelectionSection(key: const ValueKey('selectPlayers'));
           case ScoringPhase.innings1: case ScoringPhase.innings2: return _buildBallByBallSection(key: const ValueKey('scoring'));
           case ScoringPhase.inningsBreak: return _buildInningsBreakSection(key: const ValueKey('break'));
-          // --- FIX: Added case for matchEnd to call the missing function ---
           case ScoringPhase.matchEnd: return _buildMatchResultSection(key: const ValueKey('result'));
-          // --- END FIX ---
           case ScoringPhase.finished: return Center( key: const ValueKey('finished'), child: Card( child: Padding( padding: const EdgeInsets.all(16.0), child: Text('Match Finished: $_summaryText'), )));
-          // No default needed and no fallback return needed as all cases are covered.
        }
    }
 
@@ -671,21 +638,19 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   // --- Widgets for each phase ---
   Widget _buildTossSection({Key? key}) { return Card( key: key, elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding( padding: const EdgeInsets.all(16.0), child: Column( mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch, children: [ Text('Toss Details', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)), const SizedBox(height: 20), DropdownButtonFormField<String>( initialValue: _tossWinner, hint: const Text('Select Toss Winner'), decoration: InputDecoration( labelText: 'Toss Winner', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), prefixIcon: const Icon(Icons.military_tech_outlined),), items: [widget.teamAName, widget.teamBName].map((team) => DropdownMenuItem(value: team, child: Text(team))).toList(), onChanged: (value) { setState(() { _tossWinner = value; }); },), const SizedBox(height: 16), const Text('Toss Decision', style: TextStyle(fontWeight: FontWeight.w500)), Row( children: [ Expanded( child: RadioListTile<TossDecision>( title: const Text('Bat'), value: TossDecision.Bat, groupValue: _tossDecision, onChanged: (value) { setState(() { _tossDecision = value; }); }, ),), Expanded( child: RadioListTile<TossDecision>( title: const Text('Bowl'), value: TossDecision.Bowl, groupValue: _tossDecision, onChanged: (value) { setState(() { _tossDecision = value; }); }, ),), ],), const SizedBox(height: 20), ElevatedButton.icon( icon: const Icon(Icons.arrow_forward), label: const Text('Confirm Toss & Select Players'), style: ElevatedButton.styleFrom( padding: const EdgeInsets.symmetric(vertical: 12),), onPressed: () { if (_tossWinner == null || _tossDecision == null) { ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text('Please select toss winner and decision.'), backgroundColor: Colors.red,),); return; } setState(() { String decisionStr = _tossDecision == TossDecision.Bat ? "bat" : "bowl"; _summaryText = "$_tossWinner won the toss and chose to $decisionStr."; if ((_tossWinner == widget.teamAName && _tossDecision == TossDecision.Bat) || (_tossWinner == widget.teamBName && _tossDecision == TossDecision.Bowl)) { _battingTeamName = widget.teamAName; _bowlingTeamName = widget.teamBName; } else { _battingTeamName = widget.teamBName; _bowlingTeamName = widget.teamAName; } _currentPhase = ScoringPhase.selectPlayers; _sendScoreUpdateToBackend(); }); },) ],),),); }
   Widget _buildPlayerDropdown({ required Player? value, required String label, required IconData icon, required List<Player> players, required ValueChanged<Player?> onChanged, Player? disabledPlayer, }) { return DropdownButtonFormField<Player>( initialValue: value, hint: Text(label), decoration: InputDecoration( labelText: label, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), prefixIcon: Icon(icon),), items: players .map((player) => DropdownMenuItem( value: player, enabled: (!player.isOut && (disabledPlayer == null || player.id != disabledPlayer.id)), child: Text( player.name + (player.isOut ? " (Out)" : ""), style: TextStyle( color: (player.isOut || (disabledPlayer != null && player.id == disabledPlayer.id)) ? Colors.grey : null,),),)).toList(), onChanged: onChanged,); }
-  Widget _buildPlayerSelectionSection({Key? key}) { final battingPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; final bowlingPlayers = (_bowlingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; final availableBatsmen = battingPlayers.where((p) => !p.isOut).toList(); final availableBowlers = bowlingPlayers.where((p) => !p.isOut).toList(); return Card( key: key, elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding( padding: const EdgeInsets.all(16.0), child: Column( mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch, children: [ Text('Select Opening Players', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)), const SizedBox(height: 20), Text('Batting Team: $_battingTeamName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 16), _buildPlayerDropdown( value: _striker, label: 'Select Striker (Batsman 1)', icon: Icons.sports_cricket, players: availableBatsmen, disabledPlayer: _nonStriker, onChanged: (player) { setState(() { _striker = player; }); },), const SizedBox(height: 16), _buildPlayerDropdown( value: _nonStriker, label: 'Select Non-Striker (Batsman 2)', icon: Icons.sports_cricket, players: availableBatsmen, disabledPlayer: _striker, onChanged: (player) { setState(() { _nonStriker = player; }); },), const SizedBox(height: 24), Text('Bowling Team: $_bowlingTeamName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 16), _buildPlayerDropdown( value: _currentBowler, label: 'Select Opening Bowler', icon: Icons.sports, players: availableBowlers, onChanged: (player) { setState(() { _currentBowler = player; }); },), const SizedBox(height: 24), ElevatedButton.icon( icon: const Icon(Icons.play_arrow), label: Text(_isFirstInnings ? 'Start 1st Innings' : 'Start 2nd Innings'), style: ElevatedButton.styleFrom( padding: const EdgeInsets.symmetric(vertical: 12),), onPressed: () { if (_striker == null || _nonStriker == null || _currentBowler == null) { ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text('Please select all three players.'), backgroundColor: Colors.red,),); return; } if (_striker!.id == _nonStriker!.id) { ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text('Striker and Non-Striker cannot be the same player.'), backgroundColor: Colors.red,),); return; } setState(() { if (_isFirstInnings) { _teamARuns = 0; _teamAWickets = 0; _teamABalls = 0; _teamBRuns = 0; _teamBWickets = 0; _teamBBalls = 0; _targetScore = -1; _firstInningsValidBallsBowled = 0; for (var p in _fetchedTeamAPlayers) { p.runs=0; p.ballsFaced=0; p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0; p.isOut=false; p.dismissalInfo="";} for (var p in _fetchedTeamBPlayers) { p.runs=0; p.ballsFaced=0; p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0; p.isOut=false; p.dismissalInfo="";} } else { List<Player> newBattingTeamPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; for (var p in newBattingTeamPlayers) { p.runs=0; p.ballsFaced=0; p.isOut = false; p.dismissalInfo=""; } List<Player> newBowlingTeamPlayers = (_bowlingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; for (var p in newBowlingTeamPlayers) { p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0;} } _currentOverNumber = 1; _currentBallNumberInOver = 1; /* _ballsBowledThisOverRaw = 0; */ _ballsThisOverDisplay = []; _extras = 0; _dismissedBatsmen = []; _bowlersUsed = [];
-    // Clear timelines only on 1st innings start
+  Widget _buildPlayerSelectionSection({Key? key}) { final battingPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; final bowlingPlayers = (_bowlingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; final availableBatsmen = battingPlayers.where((p) => !p.isOut).toList(); final availableBowlers = bowlingPlayers.where((p) => !p.isOut).toList(); return Card( key: key, elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding( padding: const EdgeInsets.all(16.0), child: Column( mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch, children: [ Text('Select Opening Players', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)), const SizedBox(height: 20), Text('Batting Team: $_battingTeamName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 16), _buildPlayerDropdown( value: _striker, label: 'Select Striker (Batsman 1)', icon: Icons.sports_cricket, players: availableBatsmen, disabledPlayer: _nonStriker, onChanged: (player) { setState(() { _striker = player; }); },), const SizedBox(height: 16), _buildPlayerDropdown( value: _nonStriker, label: 'Select Non-Striker (Batsman 2)', icon: Icons.sports_cricket, players: availableBatsmen, disabledPlayer: _striker, onChanged: (player) { setState(() { _nonStriker = player; }); },), const SizedBox(height: 24), Text('Bowling Team: $_bowlingTeamName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 16), _buildPlayerDropdown( value: _currentBowler, label: 'Select Opening Bowler', icon: Icons.sports, players: availableBowlers, onChanged: (player) { setState(() { _currentBowler = player; }); },), const SizedBox(height: 24), ElevatedButton.icon( icon: const Icon(Icons.play_arrow), label: Text(_isFirstInnings ? 'Start 1st Innings' : 'Start 2nd Innings'), style: ElevatedButton.styleFrom( padding: const EdgeInsets.symmetric(vertical: 12),), onPressed: () { if (_striker == null || _nonStriker == null || _currentBowler == null) { ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text('Please select all three players.'), backgroundColor: Colors.red,),); return; } if (_striker!.id == _nonStriker!.id) { ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text('Striker and Non-Striker cannot be the same player.'), backgroundColor: Colors.red,),); return; } setState(() { if (_isFirstInnings) { _teamARuns = 0; _teamAWickets = 0; _teamABalls = 0; _teamBRuns = 0; _teamBWickets = 0; _teamBBalls = 0; _targetScore = -1; _firstInningsValidBallsBowled = 0; for (var p in _fetchedTeamAPlayers) { p.runs=0; p.ballsFaced=0; p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0; p.isOut=false; p.dismissalInfo="";} for (var p in _fetchedTeamBPlayers) { p.runs=0; p.ballsFaced=0; p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0; p.isOut=false; p.dismissalInfo="";} } else { List<Player> newBattingTeamPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; for (var p in newBattingTeamPlayers) { p.runs=0; p.ballsFaced=0; p.isOut = false; p.dismissalInfo=""; } List<Player> newBowlingTeamPlayers = (_bowlingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; for (var p in newBowlingTeamPlayers) { p.ballsBowled=0; p.runsConceded=0; p.wicketsTaken=0;} } _currentOverNumber = 1; _currentBallNumberInOver = 1; _ballsThisOverDisplay = []; _extras = 0; _dismissedBatsmen = []; _bowlersUsed = [];
     if (_isFirstInnings) {
       _team1Timeline = [];
       _team2Timeline = [];
     }
     _summaryText = "$_battingTeamName is batting.";
     _matchStatusText = "Live";
- if (!_isFirstInnings && _targetScore > 0) { // Check target score > 0
+ if (!_isFirstInnings && _targetScore > 0) {
  int ballsRemaining = _firstInningsValidBallsBowled > 0 ? _firstInningsValidBallsBowled : _maxOvers * 6;
  _summaryText = "$_battingTeamName need $_targetScore runs from $ballsRemaining balls."; } _currentPhase = _isFirstInnings ? ScoringPhase.innings1 : ScoringPhase.innings2; _sendScoreUpdateToBackend(); }); },) ],),),); }
   Widget _buildBallByBallSection({Key? key}) { final theme = Theme.of(context); final bool bowlerNeeded = _currentBowler == null; final ButtonStyle outcomeButtonStyle = ElevatedButton.styleFrom( minimumSize: const Size(45, 45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), backgroundColor: theme.primaryColor.withOpacity(0.15), foregroundColor: theme.primaryColor, side: BorderSide(color: theme.primaryColor.withOpacity(0.4)), elevation: 1,); final ButtonStyle wicketButtonStyle = ElevatedButton.styleFrom( minimumSize: const Size(45, 45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), backgroundColor: Colors.red.shade700, foregroundColor: Colors.white, elevation: 2,); return Card( key: key, elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding( padding: const EdgeInsets.all(16.0), child: Column( crossAxisAlignment: CrossAxisAlignment.stretch, children: [ Text( _isFirstInnings ? '1st Innings Scoring' : '2nd Innings Scoring', textAlign: TextAlign.center, style: TextStyle( fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)), const SizedBox(height: 12), Text('Bowler: ${_currentBowler?.name ?? 'Select Next Bowler'}'), const SizedBox(height: 4), RichText( textAlign: TextAlign.center, text: TextSpan( style: DefaultTextStyle.of(context).style.copyWith(fontSize: 12), children: <TextSpan>[ TextSpan( text: '${_striker?.name ?? "N/A"}*', style: const TextStyle(fontWeight: FontWeight.bold)), TextSpan( text: ' (${_striker?.runs ?? 0}/${_striker?.ballsFaced ?? 0})', style: TextStyle(color: Colors.grey[700])), const TextSpan(text: '  |  '), TextSpan( text: '${_nonStriker?.name ?? "N/A"} ', style: const TextStyle(fontWeight: FontWeight.normal)), TextSpan( text: '(${_nonStriker?.runs ?? 0}/${_nonStriker?.ballsFaced ?? 0})', style: TextStyle(color: Colors.grey[700])),],),), const Divider(height: 20), Text('Over $_currentOverNumber | Ball $_currentBallNumberInOver', style: const TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 8), SingleChildScrollView( scrollDirection: Axis.horizontal, child: Row( children: _ballsThisOverDisplay.map((outcome) => _buildBallWidget(outcome)).toList(),),), const Divider(height: 20), if (bowlerNeeded) _buildNextBowlerSelector() else Column( children: [ const Text('Enter Ball Outcome:', textAlign: TextAlign.center), const SizedBox(height: 12), Wrap( spacing: 8.0, runSpacing: 8.0, alignment: WrapAlignment.center, children: [0, 1, 2, 3, 4, 6].map((runs) => ElevatedButton( onPressed: () => _recordRun(runs), style: outcomeButtonStyle, child: Text('$runs'),)).toList(),), const SizedBox(height: 12), Wrap( spacing: 8.0, runSpacing: 8.0, alignment: WrapAlignment.center, children: [ ElevatedButton(onPressed: () => _recordExtra(ExtraType.Wide), style: outcomeButtonStyle, child: const Text('Wd')), ElevatedButton(onPressed: () => _recordExtra(ExtraType.NoBall), style: outcomeButtonStyle, child: const Text('Nb')), ElevatedButton(onPressed: () => _recordExtra(ExtraType.LegBye), style: outcomeButtonStyle, child: const Text('Lb')), ElevatedButton(onPressed: _recordWicket, style: wicketButtonStyle, child: const Text('W')),],),],), const SizedBox(height: 20), if (_dismissedBatsmen.isNotEmpty) ...[ const Text("Fall of Wickets", style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Column( crossAxisAlignment: CrossAxisAlignment.start, children: _dismissedBatsmen.map((p) => Padding( padding: const EdgeInsets.symmetric(vertical: 2.0), child: Text( "${_dismissedBatsmen.indexOf(p)+1}. ${p.name} ${p.dismissalInfo} ${p.runs}(${p.ballsFaced})", style: TextStyle(fontSize: 11, color: Colors.grey[700]),),)).toList()), const Divider(height: 16),], if (_bowlersUsed.isNotEmpty) ...[ const Text("Bowlers", style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Column( crossAxisAlignment: CrossAxisAlignment.start, children: _bowlersUsed.map((p) => Padding( padding: const EdgeInsets.symmetric(vertical: 2.0), child: Text( "${p.name}: ${p.getBowlerFigures()}", style: TextStyle(fontSize: 11, color: Colors.grey[700]),),)).toList()), const Divider(height: 16),], const SizedBox(height: 10), ElevatedButton( style: ElevatedButton.styleFrom( padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: Colors.blueGrey,), onPressed: () { showDialog( context: context, barrierDismissible: false, builder: (BuildContext context) { return AlertDialog( title: const Text('End Innings?'), content: Text('Are you sure you want to end the ${ _isFirstInnings ? "1st" : "2nd"} innings?'), actions: <Widget>[ TextButton( child: const Text('Cancel'), onPressed: () { Navigator.of(context).pop(); },), TextButton( child: const Text('End Innings'), onPressed: () { Navigator.of(context).pop(); if (_isFirstInnings) { _firstInningsValidBallsBowled = (_battingTeamName == widget.teamAName) ? _teamABalls : _teamBBalls; _targetScore = (_battingTeamName == widget.teamAName ? _teamARuns : _teamBRuns) + 1; _summaryText = "End of 1st Innings. Target: $_targetScore"; setState(() { _currentPhase = ScoringPhase.inningsBreak; _matchStatusText = "Innings Break"; }); } else { int battingTeamRuns = (_battingTeamName == widget.teamAName) ? _teamARuns : _teamBRuns; String bowlingTeamName = (_battingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName; if (_targetScore == -1) { _summaryText = "Match Ended (Incomplete)"; } else if (battingTeamRuns >= _targetScore) { _summaryText = "$_battingTeamName won the match."; } else if (battingTeamRuns < _targetScore - 1) { int runsMargin = (_targetScore - 1) - battingTeamRuns; _summaryText = "$bowlingTeamName won by $runsMargin runs."; } else { _summaryText = "Match Tied."; } setState(() { _currentPhase = ScoringPhase.matchEnd; _matchStatusText = "Finished"; }); } _sendScoreUpdateToBackend(); },),],);},);}, child: Text(_isFirstInnings ? 'End 1st Innings' : 'End 2nd Innings'),), ],),),); }
   Widget _buildNextBowlerSelector() { final bowlingPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; Player? previousBowler; if (_bowlersUsed.isNotEmpty) { previousBowler = _bowlersUsed.last; } final availableBowlers = bowlingPlayers.where((p) => !p.isOut).toList(); return Padding( padding: const EdgeInsets.only(bottom: 16.0), child: _buildPlayerDropdown( value: _currentBowler, label: 'Select Bowler for Over $_currentOverNumber', icon: Icons.sports, players: availableBowlers, disabledPlayer: previousBowler, onChanged: (player) { if (previousBowler != null && player?.id == previousBowler.id) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot select the same bowler for consecutive overs."), duration: Duration(seconds: 2),)); return; } setState(() { _currentBowler = player; _debounceAndSendUpdate(); }); },),); }
 
-  // --- FIX: Corrected typo and added status update in _buildInningsBreakSection ---
   Widget _buildInningsBreakSection({Key? key}) {
     String chasingTeamName = (_battingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName;
     String teamToChase = (chasingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName;
@@ -724,9 +689,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                         setState(() {
                           _isFirstInnings = false;
                           _currentPhase = ScoringPhase.selectPlayers;
-                          // --- FIX: Update match status text ---
                           _matchStatusText = "Live";
-                          // --- END FIX ---
                           final tempTeam = _battingTeamName;
                           _battingTeamName = _bowlingTeamName;
                           _bowlingTeamName = tempTeam; // Corrected typo was here
@@ -751,7 +714,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
         ),
     );
   }
-  // --- END FIX ---
 
   // --- NEW FUNCTION: PDF DOWNLOAD LOGIC ---
   Future<void> _downloadPdf() async {
@@ -802,28 +764,32 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
             }
 
             Directory? dir = await getDownloadsDirectory();
-            if (dir == null) {
-              throw Exception('Could not find downloads directory.');
+            // --- FIXED: ADDED NULL CHECK ---
+            if (dir != null) {
+                final String savePath = "${dir.path}/$downloadFileName";
+
+                File file = File(savePath);
+                await file.writeAsBytes(pdfBytes);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Saved to ${dir.path.split('/').last}'),
+                    backgroundColor: Colors.green,
+                    action: SnackBarAction(
+                      label: 'Open',
+                      onPressed: () {
+                        OpenFile.open(savePath);
+                      },
+                    ),
+                  ),
+                );
+                await OpenFile.open(savePath);
+            } else {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not access downloads folder.'), backgroundColor: Colors.red),
+                );
             }
-            final String savePath = "${dir.path}/$downloadFileName";
-
-            File file = File(savePath);
-            await file.writeAsBytes(pdfBytes);
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Saved to ${dir.path.split('/').last}'),
-                backgroundColor: Colors.green,
-                action: SnackBarAction(
-                  label: 'Open',
-                  onPressed: () {
-                    OpenFile.open(savePath);
-                  },
-                ),
-              ),
-            );
-            await OpenFile.open(savePath);
-            // --- END MOBILE LOGIC ---
+            // --- END FIXED ---
           }
         } else {
           final error = json.decode(response.body)['message'] ?? 'Unknown error';
@@ -842,9 +808,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
       }
     }
   }
-  // --- END NEW FUNCTION ---
 
-  // --- MODIFICATION: Add button to _buildMatchResultSection ---
   Widget _buildMatchResultSection({Key? key}) {
     String resultText = _summaryText; // Use the summary text which should hold the result
     return Card(
@@ -891,7 +855,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                       },
                   ),
                   
-                  // --- ADD THIS BUTTON ---
                   const SizedBox(height: 12),
                   ElevatedButton.icon(
                     icon: _isDownloadingPdf
@@ -904,13 +867,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                     ),
                     onPressed: _isDownloadingPdf ? null : _downloadPdf,
                   ),
-                  // --- END ADDED BUTTON ---
 
                 ],
             ),
         ),
     );
   }
- // --- END FIX ---
 } // End of _AdminUpdateScoreScreenState class
-

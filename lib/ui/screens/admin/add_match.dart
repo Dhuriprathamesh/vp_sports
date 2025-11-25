@@ -19,26 +19,39 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   double _navigationDirection = 1.0;
   bool _isLoading = false;
 
+  // Controllers
   late final TextEditingController _teamANameController;
   late final TextEditingController _teamBNameController;
   late final List<TextEditingController> _teamAPlayerControllers;
   late final List<TextEditingController> _teamBPlayerControllers;
-  late final TextEditingController _oversController;
   late final TextEditingController _venueController;
   late final TextEditingController _startTimeController;
+  
+  // Cricket Specific
+  late final TextEditingController _oversController;
   late final TextEditingController _umpiresController;
+
+  // Football Specific
+  late final TextEditingController _matchDurationController;
+  late final TextEditingController _refereesController;
 
   @override
   void initState() {
     super.initState();
     _teamANameController = TextEditingController();
     _teamBNameController = TextEditingController();
-    _oversController = TextEditingController();
     _venueController = TextEditingController();
     // Set a default time for user convenience
     _startTimeController = TextEditingController(
         text: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now().add(const Duration(days: 1))));
+    
+    // Cricket
+    _oversController = TextEditingController();
     _umpiresController = TextEditingController();
+
+    // Football
+    _matchDurationController = TextEditingController(text: "90"); // Default 90 mins
+    _refereesController = TextEditingController();
 
     final playerCounts = _getSportPlayerCounts(widget.sportName);
     final totalPlayers = playerCounts['players']! + playerCounts['subs']!;
@@ -52,10 +65,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   void dispose() {
     _teamANameController.dispose();
     _teamBNameController.dispose();
-    _oversController.dispose();
     _venueController.dispose();
     _startTimeController.dispose();
+    _oversController.dispose();
     _umpiresController.dispose();
+    _matchDurationController.dispose();
+    _refereesController.dispose();
     for (var controller in _teamAPlayerControllers) {
       controller.dispose();
     }
@@ -72,7 +87,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     setState(() => _isLoading = true);
 
-    final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
     final sportNameUrl = widget.sportName.toLowerCase();
     final String apiUrl = 'http://$host:5000/api/add_${sportNameUrl}_match';
     
@@ -87,22 +102,33 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           .where((name) => name.isNotEmpty)
           .toList();
       
-      final List<String> umpires = _umpiresController.text
-          .split(',')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-
-      final Map<String, dynamic> matchData = {
+      Map<String, dynamic> matchData = {
         'team_a_name': _teamANameController.text,
         'team_b_name': _teamBNameController.text,
         'team_a_players': teamAPlayers,
         'team_b_players': teamBPlayers,
-        'overs': _oversController.text,
         'start_time': _startTimeController.text,
         'venue': _venueController.text,
-        'umpires': umpires,
       };
+
+      // Add sport-specific data
+      if (widget.sportName == 'Cricket') {
+        final List<String> umpires = _umpiresController.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+        matchData['overs'] = _oversController.text;
+        matchData['umpires'] = umpires;
+      } else if (widget.sportName == 'Football') {
+        final List<String> referees = _refereesController.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+        matchData['match_duration'] = _matchDurationController.text;
+        matchData['referees'] = referees;
+      }
 
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -115,8 +141,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Match added successfully!'), backgroundColor: Colors.green),
             );
-            // MODIFIED: Pop with a 'true' result to signal success
-            Navigator.of(context).pop(true);
+            Navigator.of(context).pop(true); // Return true to trigger refresh
           } else {
             final responseBody = json.decode(response.body);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -147,7 +172,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.8,
+        height: MediaQuery.of(context).size.height * 0.85,
         width: MediaQuery.of(context).size.width,
         padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 16.0),
         child: Column(
@@ -359,7 +384,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             icon: Icons.group_outlined,
           ),
           const SizedBox(height: 16),
-          _buildSectionHeader('Team $teamLabel Players'),
+          _buildSectionHeader('Team $teamLabel Players (${playerCounts['players']})'),
           ..._buildPlayerInputFields(
             playerControllers,
             playerCounts['players']!,
@@ -395,6 +420,18 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           children: [
             _buildSectionHeader('Match Information'),
             ..._getSportSpecificMatchInfoFields(),
+            const SizedBox(height: 8),
+            _buildTextFormField(
+              label: 'Venue',
+              controller: _venueController,
+              icon: Icons.location_on_outlined,
+            ),
+             _buildTextFormField(
+                controller: _startTimeController,
+                label: 'Start Time (YYYY-MM-DD HH:MM:SS)', 
+                icon: Icons.schedule_outlined,
+                keyboardType: TextInputType.datetime
+            ),
           ],
         ),
       ),
@@ -405,32 +442,35 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     switch (widget.sportName) {
       case 'Cricket':
         return [
-          _buildResponsiveFormFieldRow(
-            _buildTextFormField(
-                controller: _oversController,
-                label: 'Overs', icon: Icons.sports_cricket_outlined, keyboardType: TextInputType.number),
-            _buildTextFormField(
-                controller: _venueController,
-                label: 'Venue', icon: Icons.location_on_outlined),
+           _buildTextFormField(
+              controller: _oversController,
+              label: 'Overs per Innings', 
+              icon: Icons.sports_cricket_outlined, 
+              keyboardType: TextInputType.number
           ),
-          _buildTextFormField(
-              controller: _startTimeController,
-              label: 'Start Time (YYYY-MM-DD HH:MM:SS)', icon: Icons.schedule_outlined),
           _buildTextFormField(
               controller: _umpiresController,
-              label: 'Umpire(s) (comma-separated)', icon: Icons.sports),
+              label: 'Umpire(s) (comma-separated)', 
+              icon: Icons.sports
+          ),
         ];
-      default:
+      case 'Football':
         return [
           _buildTextFormField(
-            label: 'Venue',
-            controller: _venueController,
-            icon: Icons.location_on_outlined,
+            controller: _matchDurationController,
+            label: 'Match Duration (mins)',
+            icon: Icons.timer,
+            keyboardType: TextInputType.number,
+            helperText: 'Standard: 90 mins (45 + 45)'
           ),
-           _buildTextFormField(
-              controller: _startTimeController,
-              label: 'Start Time (YYYY-MM-DD HH:MM:SS)', icon: Icons.schedule_outlined),
+          _buildTextFormField(
+            controller: _refereesController,
+            label: 'Referee(s) (comma-separated)',
+            icon: Icons.sports_soccer_outlined
+          ),
         ];
+      default:
+        return [];
     }
   }
 
@@ -482,8 +522,14 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     switch (sportName) {
       case 'Cricket':
         return {'players': 11, 'subs': 4};
+      case 'Football':
+        return {'players': 11, 'subs': 5}; // 11 Main + 5 Subs
+      case 'Kabaddi':
+        return {'players': 7, 'subs': 5};
+      case 'Volleyball':
+        return {'players': 6, 'subs': 6};
       default:
-        return {'players': 11, 'subs': 4};
+        return {'players': 1, 'subs': 0};
     }
   }
 
@@ -500,31 +546,13 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
-  Widget _buildResponsiveFormFieldRow(Widget left, Widget right) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth > 400) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: left),
-              const SizedBox(width: 16),
-              Expanded(child: right),
-            ],
-          );
-        } else {
-          return Column(children: [left, right]);
-        }
-      },
-    );
-  }
-
   Widget _buildTextFormField(
       {required String label,
       IconData? icon,
       TextEditingController? controller,
       TextInputType? keyboardType,
       bool isRequired = true,
+      String? helperText,
       }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -533,6 +561,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
+          helperText: helperText,
           prefixIcon:
               icon != null ? Icon(icon, color: Colors.grey[600], size: 20) : null,
           contentPadding:
@@ -577,6 +606,7 @@ class _AnimatedColumnState extends State<_AnimatedColumn>
   late final AnimationController _controller;
 
   @override
+
   void initState() {
     super.initState();
     _controller = AnimationController(
@@ -625,4 +655,3 @@ class _AnimatedColumnState extends State<_AnimatedColumn>
     );
   }
 }
-

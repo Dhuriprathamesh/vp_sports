@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import '../../../core/app_theme.dart';
+import '../common/live_football_score_screen.dart';
+import '../common/live_cricket_score_screen.dart';
 
 class MatchDetailsScreen extends StatefulWidget {
   final int matchId;
@@ -58,7 +60,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       _errorMessage = '';
     });
     try {
-      final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
       final response = await http.get(
           Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
 
@@ -92,40 +94,57 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Future<void> _startMatch() async {
     setState(() => _isLoading = true);
     try {
-      final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
       final response = await http
           .post(Uri.parse('http://$host:5000/api/start_match/${widget.matchId}'));
 
       if (mounted) {
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Match is now live!'),
-                backgroundColor: Colors.green),
+            const SnackBar(content: Text('Match is now live!'), backgroundColor: Colors.green),
           );
-          Navigator.of(context).pop(true);
+          
+          // Determine which screen to navigate to based on sport
+          Widget nextScreen;
+          if (widget.sportName == 'Football') {
+            nextScreen = LiveFootballScoreScreen(
+              matchId: widget.matchId,
+              teamAName: _matchDetails!['team_a_name'],
+              teamBName: _matchDetails!['team_b_name'],
+              isAdmin: true,
+              isForBoys: widget.isForBoys,
+            );
+          } else {
+            nextScreen = LiveCricketScoreScreen(
+              matchId: widget.matchId,
+              sportName: widget.sportName,
+              teamAName: _matchDetails!['team_a_name'],
+              teamBName: _matchDetails!['team_b_name'],
+              isForBoys: widget.isForBoys,
+              onGenderToggle: widget.onGenderToggle,
+              isAdmin: true,
+            );
+          }
+
+          // Replace the current details screen with the live score screen
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => nextScreen));
+
         } else {
           final responseBody = json.decode(response.body);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Error: ${responseBody['message']}'),
-                backgroundColor: Colors.red),
+            SnackBar(content: Text('Error: ${responseBody['message']}'), backgroundColor: Colors.red),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Failed to connect to server: $e'),
-              backgroundColor: Colors.red),
+          SnackBar(content: Text('Failed to connect to server: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -153,9 +172,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final gradientColors = widget.isForBoys
-        ? AppTheme.boysGradientColors
-        : AppTheme.girlsGradientColors;
+    final gradientColors = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors;
 
     return Scaffold(
       appBar: AppBar(
@@ -167,11 +184,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          gradient: LinearGradient(colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
         ),
         child: _buildBody(),
       ),
@@ -184,32 +197,23 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
     if (_errorMessage.isNotEmpty) {
-      return Center(
-        child: Text(_errorMessage, style: const TextStyle(color: Colors.white)),
-      );
+      return Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.white)));
     }
     if (_matchDetails == null) {
-      return const Center(
-          child: Text('No match details found.',
-              style: TextStyle(color: Colors.white)));
+      return const Center(child: Text('No match details found.', style: TextStyle(color: Colors.white)));
     }
 
     return Column(
       children: [
-        _buildMatchHeader(
-          _matchDetails!['team_a_name'],
-          _matchDetails!['team_b_name'],
-        ),
+        _buildMatchHeader(_matchDetails!['team_a_name'], _matchDetails!['team_b_name']),
         _buildTabBar(),
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
               _buildInfoTab(),
-              _buildPlayerListTab(
-                  _matchDetails!['team_a_name'], List<String>.from(_matchDetails!['team_a_players'])),
-              _buildPlayerListTab(
-                  _matchDetails!['team_b_name'], List<String>.from(_matchDetails!['team_b_players'])),
+              _buildPlayerListTab(_matchDetails!['team_a_name'], List<String>.from(_matchDetails!['team_a_players'])),
+              _buildPlayerListTab(_matchDetails!['team_b_name'], List<String>.from(_matchDetails!['team_b_players'])),
             ],
           ),
         ),
@@ -232,10 +236,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           ),
           child: Row(
             children: [
-              Expanded(
-                  child: Text(teamA,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold))),
+              Expanded(child: Text(teamA, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold))),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Column(
@@ -246,10 +247,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                   ],
                 ),
               ),
-              Expanded(
-                  child: Text(teamB,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold))),
+              Expanded(child: Text(teamB, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold))),
             ],
           ),
         ),
@@ -274,13 +272,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         indicator: BoxDecoration(
           color: Colors.white.withAlpha(242),
           borderRadius: BorderRadius.circular(20),
-           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(26),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            )
-          ],
+           boxShadow: [BoxShadow(color: Colors.black.withAlpha(26), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         tabs: const [
           Tab(child: Text("Info")),
@@ -293,6 +285,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   Widget _buildInfoTab() {
     final startTime = DateTime.parse(_matchDetails!['start_time']);
+    final isFootball = widget.sportName == 'Football';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Card(
@@ -309,9 +303,20 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 const Divider(),
                _buildInfoRow(Icons.location_on_outlined, 'Venue', _matchDetails!['venue']),
                 const Divider(),
-               _buildInfoRow(Icons.sports, 'Umpires', (_matchDetails!['umpires'] as List).join(', ')),
+               // Dynamically display Referee/Umpires
+               _buildInfoRow(Icons.sports, isFootball ? 'Referees' : 'Umpires', 
+                  isFootball 
+                    ? (_matchDetails!['referees'] as List).join(', ')
+                    : (_matchDetails!['umpires'] as List).join(', ')),
                 const Divider(),
-               _buildInfoRow(Icons.sports_cricket_outlined, 'Overs', _matchDetails!['overs_per_innings'].toString()),
+               // Dynamically display Duration/Overs
+               _buildInfoRow(
+                 isFootball ? Icons.timer : Icons.sports_cricket_outlined, 
+                 isFootball ? 'Duration' : 'Overs', 
+                 isFootball 
+                    ? "${_matchDetails!['match_duration']} mins"
+                    : _matchDetails!['overs_per_innings'].toString()
+               ),
             ],
           ),
         ),
@@ -335,9 +340,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   }
 
   Widget _buildPlayerListTab(String teamName, List<String> players) {
-    if (players.isEmpty) {
-      return const Center(child: Text("No player data available.", style: TextStyle(color: Colors.white)));
-    }
+    if (players.isEmpty) return const Center(child: Text("No player data available.", style: TextStyle(color: Colors.white)));
     
     final playerCounts = _getSportPlayerCounts(widget.sportName);
     final playingCount = playerCounts['players']!;
@@ -347,18 +350,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       itemCount: players.length,
       itemBuilder: (context, index) {
         final isSubstitute = index >= playingCount;
-        return _AnimatedListItem(
-          index: index,
-          child: Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
-                child: Text("${index + 1}", style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
-              ),
-              title: Text(players[index]),
-              trailing: isSubstitute ? const Text("Sub", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)) : null,
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
+              child: Text("${index + 1}", style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
             ),
+            title: Text(players[index]),
+            trailing: isSubstitute ? const Text("Sub", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)) : null,
           ),
         );
       },
@@ -368,95 +368,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Widget _buildStartMatchButton() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(26),
-            blurRadius: 8,
-            offset: const Offset(0, -4),
-          )
-        ]
-      ),
+      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withAlpha(26), blurRadius: 8, offset: const Offset(0, -4))]),
       child: SafeArea(
         child: ElevatedButton.icon(
           onPressed: _isLoading ? null : _startMatch,
-          icon: _isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child:
-                      CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.play_circle_fill_outlined),
+          icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.play_circle_fill_outlined),
           label: const Text('Start Match'),
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 50),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
+          style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ),
       ),
     );
   }
 }
-
-// A simple widget for staggered list animations
-class _AnimatedListItem extends StatefulWidget {
-  final int index;
-  final Widget child;
-
-  const _AnimatedListItem({required this.index, required this.child});
-
-  @override
-  State<_AnimatedListItem> createState() => _AnimatedListItemState();
-}
-
-class _AnimatedListItemState extends State<_AnimatedListItem> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-  late final Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-
-    final delay = (widget.index * 80).toDouble();
-    final animationDuration = _controller.duration!.inMilliseconds;
-    final intervalStart = (delay / animationDuration).clamp(0.0, 1.0);
-    
-    _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Interval(intervalStart, 1.0, curve: Curves.easeOut),
-      ),
-    );
-     _slide = Tween<Offset>(begin: const Offset(0.0, 0.5), end: Offset.zero).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Interval(intervalStart, 1.0, curve: Curves.easeOutCubic),
-      ),
-    );
-    _controller.forward();
-  }
-  
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: SlideTransition(
-        position: _slide,
-        child: widget.child,
-      ),
-    );
-  }
-}
-

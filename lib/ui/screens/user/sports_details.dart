@@ -67,7 +67,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     });
 
     try {
-      final String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
       final sportNameUrl = widget.sportName.toLowerCase();
       // Use the status parameter directly in the URL
       final String apiUrl =
