@@ -161,6 +161,16 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                 .toList();
             // --- END FIX ---
           }
+          
+          // --- FIX: Handle Integer vs Boolean mismatch for is_first_innings ---
+          bool parsedIsFirstInnings = true;
+          if (fetchedData['is_first_innings'] != null) {
+            if (fetchedData['is_first_innings'] is bool) {
+               parsedIsFirstInnings = fetchedData['is_first_innings'];
+            } else if (fetchedData['is_first_innings'] is int) {
+               parsedIsFirstInnings = fetchedData['is_first_innings'] == 1;
+            }
+          }
 
           setState(() {
             _liveScoreData = fetchedData; // Store the raw map too
@@ -170,7 +180,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             _teamABowling = parsePlayerList(fetchedData['team1_bowling']);
             _teamAExtras = fetchedData['team1_extras'] ?? 0;
             _teamBExtras = fetchedData['team2_extras'] ?? 0;
-            _isFirstInnings = fetchedData['is_first_innings'] ?? true;
+            _isFirstInnings = parsedIsFirstInnings; // Use the safely parsed boolean
             // _timelineData = List<String>.from(fetchedData['timeline'] ?? []); // Removed
             _team1TimelineData = List<String>.from(fetchedData['team1_timeline'] ?? []); // Added
             _team2TimelineData = List<String>.from(fetchedData['team2_timeline'] ?? []); // Added
@@ -557,10 +567,12 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                    dataRowMaxHeight: 36,
                    headingRowColor: WidgetStateProperty.resolveWith<Color?>((_) => Colors.grey.shade200),
                    columns: [
-                       DataColumn(label: Flexible(child: Text('Batter', style: headerStyle, overflow: TextOverflow.ellipsis))), // Use Flexible
+                       // --- FIX: Removed Flexible from DataColumn label ---
+                       DataColumn(label: Text('Batter', style: headerStyle, overflow: TextOverflow.ellipsis)),
                        DataColumn(label: Text('R', style: headerStyle), numeric: true),
                        DataColumn(label: Text('B', style: headerStyle), numeric: true),
-                       DataColumn(label: Flexible(child: Text('Status', style: headerStyle, overflow: TextOverflow.ellipsis))), // Use Flexible
+                       // --- FIX: Removed Flexible from DataColumn label ---
+                       DataColumn(label: Text('Status', style: headerStyle, overflow: TextOverflow.ellipsis)),
                    ],
                    rows: !matchStarted
                      ? [DataRow(cells: [DataCell(Text('Details after toss', style: placeholderStyle)), const DataCell(Text('-')), const DataCell(Text('-')), const DataCell(Text('-'))])]
@@ -613,7 +625,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                     dataRowMaxHeight: 32,
                     headingRowColor: WidgetStateProperty.resolveWith<Color?>((_) => Colors.grey.shade200),
                     columns: [
-                        DataColumn(label: Flexible(child: Text('Bowler', style: headerStyle, overflow: TextOverflow.ellipsis))), // Use Flexible
+                        // --- FIX: Removed Flexible from DataColumn label ---
+                        DataColumn(label: Text('Bowler', style: headerStyle, overflow: TextOverflow.ellipsis)),
                         DataColumn(label: Text('O', style: headerStyle), numeric: true),
                         DataColumn(label: Text('R', style: headerStyle), numeric: true),
                         DataColumn(label: Text('W', style: headerStyle), numeric: true),
@@ -663,7 +676,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               _isDetailsExpanded
                   ? Icons.keyboard_arrow_up
                   : Icons.keyboard_arrow_down,
-              color: Theme.of(context).primaryColor,
+                  color: Theme.of(context).primaryColor,
             ),
           ],
         ),
@@ -1027,4 +1040,3 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
  // End Bottom Navigation Bar
 
 } // End of _LiveCricketScoreScreenState
-

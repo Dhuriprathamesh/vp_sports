@@ -7,6 +7,7 @@ import '../../../core/app_theme.dart';
 import '../admin/admin_sports_details.dart' show FetchedMatch;
 import 'match_details_screen.dart';
 import '../common/live_cricket_score_screen.dart';
+import '../common/live_football_score_screen.dart'; // <-- IMPORT THIS
 
 class SportsDetailsScreen extends StatefulWidget {
   final String sportName;
@@ -30,9 +31,9 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  List<FetchedMatch> _liveMatches = []; // Use FetchedMatch
-  List<FetchedMatch> _recentMatches = []; // Use FetchedMatch
-  List<FetchedMatch> _upcomingMatches = []; // Use FetchedMatch
+  List<FetchedMatch> _liveMatches = [];
+  List<FetchedMatch> _recentMatches = [];
+  List<FetchedMatch> _upcomingMatches = [];
   bool _isLoadingLive = true;
   bool _isLoadingRecent = true;
   bool _isLoadingUpcoming = true;
@@ -42,34 +43,27 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-     _tabController.addListener(_handleTabSelection); // Add listener
+     _tabController.addListener(_handleTabSelection);
     _loadAllMatches();
   }
 
- // --- Ensure the correct tab loads initially ---
  void _handleTabSelection() {
-    // No specific action needed on tab change for now,
-    // but useful if you want logic tied to tab switches later.
     if (_tabController.indexIsChanging) {
-      // print("Switched to tab: ${_tabController.index}");
     }
   }
 
 
-  // --- Updated fetch logic (same as admin screen) ---
   Future<void> _fetchMatches(String status) async {
-    // Set loading state for the specific tab
     setState(() {
       if (status == 'live') _isLoadingLive = true;
       if (status == 'recent') _isLoadingRecent = true;
       if (status == 'upcoming') _isLoadingUpcoming = true;
-      _errorMessage = ''; // Clear previous errors
+      _errorMessage = '';
     });
 
     try {
       const String host = kIsWeb ? 'localhost' : '10.0.2.2';
       final sportNameUrl = widget.sportName.toLowerCase();
-      // Use the status parameter directly in the URL
       final String apiUrl =
           'http://$host:5000/api/get_matches/$sportNameUrl?status=$status';
 
@@ -78,22 +72,18 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       if (mounted) {
         if (response.statusCode == 200) {
           final List<dynamic> data = json.decode(response.body);
-          // Parse data into FetchedMatch objects
           final List<FetchedMatch> fetchedMatches =
               data.map((jsonItem) => FetchedMatch.fromJson(jsonItem)).toList();
 
-          // Update the correct list based on status
           setState(() {
             if (status == 'live') _liveMatches = fetchedMatches;
             if (status == 'recent') _recentMatches = fetchedMatches;
             if (status == 'upcoming') _upcomingMatches = fetchedMatches;
           });
         } else {
-          // Set error message only if fetching failed
           setState(() {
             _errorMessage = 'Failed to load $status matches (${response.statusCode}).';
           });
-          print('Error fetching $status matches: ${response.statusCode}');
         }
       }
     } catch (e) {
@@ -102,10 +92,8 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
           _errorMessage =
               'Could not connect to the server. Please ensure it is running.';
         });
-        print("Connection Error ($status): $e");
       }
     } finally {
-      // Set loading state to false for the specific tab when done
       if (mounted) {
         setState(() {
           if (status == 'live') _isLoadingLive = false;
@@ -115,30 +103,21 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       }
     }
   }
-  // --- End Updated fetch logic ---
 
-
- // --- Refreshes all match lists ---
   Future<void> _refreshAllMatches() async {
-     // Fetch all categories simultaneously
     await Future.wait([
       _fetchMatches('live'),
       _fetchMatches('recent'),
       _fetchMatches('upcoming'),
     ]);
-     // Optionally, switch tab after refresh if needed
-    // _setInitialTab();
   }
 
-  // --- Call _refreshAllMatches initially ---
   void _loadAllMatches() {
     _refreshAllMatches().then((_) {
-       // After initial load, set the tab based on data presence
       _setInitialTab();
     });
   }
 
-   // --- Set initial tab logic ---
    void _setInitialTab() {
      if (!mounted) return;
      if (_liveMatches.isNotEmpty) {
@@ -148,15 +127,13 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
      } else if (_recentMatches.isNotEmpty) {
        _tabController.animateTo(1);
      } else {
-       _tabController.animateTo(2); // Default to upcoming if all empty
+       _tabController.animateTo(2); 
      }
    }
-   // --- End Set initial tab logic ---
-
 
   @override
   void dispose() {
-     _tabController.removeListener(_handleTabSelection); // Remove listener
+     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     super.dispose();
   }
@@ -173,22 +150,20 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Row(
-          // Centering title content
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min, // Takes minimum space needed
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(widget.sportIcon, color: Colors.white),
             const SizedBox(width: 8),
             Text('${widget.sportName} Matches'),
           ],
         ),
-        // Providing an empty container in actions balances the leading back button
         actions: [Container(width: 48)],
-        centerTitle: true, // This ensures the title Row is centered
+        centerTitle: true,
         elevation: 0,
         backgroundColor: Theme.of(context).primaryColor,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight), // Standard AppBar height
+          preferredSize: const Size.fromHeight(kToolbarHeight),
           child: _buildTabBar(context),
         ),
       ),
@@ -202,7 +177,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
             end: Alignment.bottomCenter,
           ),
         ),
-        child: RefreshIndicator( // Added RefreshIndicator here
+        child: RefreshIndicator(
           onRefresh: _refreshAllMatches,
           child: TabBarView(
             controller: _tabController,
@@ -218,23 +193,22 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     );
   }
 
-  // --- TabBar remains the same ---
   Widget _buildTabBar(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), // Reduced vertical margin
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.1), // Slightly transparent background
+        color: Colors.black.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: TabBar(
         controller: _tabController,
-        labelColor: Theme.of(context).primaryColor, // Color for selected tab text
-        unselectedLabelColor: Colors.white.withOpacity(0.9), // Color for unselected tab text
+        labelColor: Theme.of(context).primaryColor,
+        unselectedLabelColor: Colors.white.withOpacity(0.9),
         labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        indicatorSize: TabBarIndicatorSize.tab, // Indicator covers the whole tab
-        indicator: BoxDecoration( // Custom indicator styling
-          color: Colors.white.withOpacity(0.95), // Indicator background color
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(20),
         ),
         tabs: const [
@@ -246,13 +220,12 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     );
   }
 
-  // --- Empty List Widget remains the same ---
   Widget _buildEmptyList(String category) {
-     return LayoutBuilder( // Ensures it takes available space for scrolling
+     return LayoutBuilder(
        builder: (context, constraints) => SingleChildScrollView(
-         physics: const AlwaysScrollableScrollPhysics(), // Allows scrolling even when content fits
+         physics: const AlwaysScrollableScrollPhysics(),
          child: ConstrainedBox(
-           constraints: BoxConstraints(minHeight: constraints.maxHeight), // Ensures it fills height
+           constraints: BoxConstraints(minHeight: constraints.maxHeight),
            child: Center(
              child: Column(
                mainAxisAlignment: MainAxisAlignment.center,
@@ -263,7 +236,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
                    'No ${category.toLowerCase()} matches to show.',
                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
                  ),
-                 if (_errorMessage.isNotEmpty) // Show error message if present
+                 if (_errorMessage.isNotEmpty)
                    Padding(
                      padding: const EdgeInsets.only(top: 16.0, left: 24, right: 24),
                      child: Text(
@@ -280,12 +253,10 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
      );
   }
 
-  // --- Updated buildMatchList (same as admin screen) ---
  Widget _buildMatchList(BuildContext context, String category, List<FetchedMatch> matches, bool isLoading) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
-     // Show error only if loading is finished and list is empty
     if (_errorMessage.isNotEmpty && matches.isEmpty) {
        return LayoutBuilder(
          builder: (context, constraints) => SingleChildScrollView(
@@ -307,10 +278,9 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
        );
     }
     if (matches.isEmpty) {
-      return _buildEmptyList(category); // Show standard empty message
+      return _buildEmptyList(category);
     }
 
-    // Use ListView.builder when there are matches
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.all(12),
@@ -320,37 +290,49 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
         return GestureDetector(
           onTap: () {
             if (category == 'Live') {
-              // Navigate to Live Score Screen (isAdmin: false)
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => LiveCricketScoreScreen(
-                    matchId: match.id,
-                    sportName: widget.sportName,
-                    teamAName: match.teamA,
-                    teamBName: match.teamB,
-                    isForBoys: widget.isForBoys,
-                    onGenderToggle: widget.onGenderToggle,
-                    isAdmin: false, // User view
+              // --- FIXED ROUTING LOGIC ---
+              if (widget.sportName == 'Football') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LiveFootballScoreScreen(
+                      matchId: match.id,
+                      teamAName: match.teamA,
+                      teamBName: match.teamB,
+                      isAdmin: false, // User view
+                      isForBoys: widget.isForBoys,
+                    ),
                   ),
-                ),
-              ).then((_) => _refreshAllMatches()); // Refresh when returning
+                ).then((_) => _refreshAllMatches());
+              } else {
+                // Default to Cricket
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LiveCricketScoreScreen(
+                      matchId: match.id,
+                      sportName: widget.sportName,
+                      teamAName: match.teamA,
+                      teamBName: match.teamB,
+                      isForBoys: widget.isForBoys,
+                      onGenderToggle: widget.onGenderToggle,
+                      isAdmin: false, // User view
+                    ),
+                  ),
+                ).then((_) => _refreshAllMatches());
+              }
+              // --- END FIXED ROUTING LOGIC ---
             } else if (category == 'Upcoming') {
-              // Navigate to Match Details Screen (isAdmin: false)
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => MatchDetailsScreen(
                     matchId: match.id,
-                    isAdmin: false, // User view
+                    isAdmin: false,
                     sportName: widget.sportName,
                     sportIcon: widget.sportIcon,
                     isForBoys: widget.isForBoys,
                     onGenderToggle: widget.onGenderToggle,
                   ),
                 ),
-              ); // No refresh needed typically when just viewing details
-            } else {
-               // Optional: Navigation for Recent matches (e.g., summary)
-                print("Tapped on Recent Match ID: ${match.id}");
+              );
             }
           },
           child: _buildMatchCard(context, match, category),
@@ -358,10 +340,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       },
     );
   }
-  // --- End Updated buildMatchList ---
 
-
-  // --- Updated _buildMatchCard (same as admin screen) ---
   Widget _buildMatchCard(BuildContext context, FetchedMatch match, String category) {
     return Card(
       elevation: 2,
@@ -373,9 +352,8 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildCardHeader(context, category, match.status), // Pass actual status
+            _buildCardHeader(context, category, match.status),
             const SizedBox(height: 12),
-            // Display content based on category
             if (category == 'Upcoming') _buildUpcomingMatchContent(context, match),
             if (category == 'Live') _buildLiveMatchContent(context, match),
             if (category == 'Recent') _buildRecentMatchContent(context, match),
@@ -384,20 +362,17 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       ),
     );
   }
-   // --- End Updated _buildMatchCard ---
 
-
- // --- NEW: Build Recent Match Content (same as admin screen) ---
  Widget _buildRecentMatchContent(BuildContext context, FetchedMatch match) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTeamRow(context, match.teamA, match.scoreA), // Use FetchedMatch scores
+        _buildTeamRow(context, match.teamA, match.scoreA),
         const SizedBox(height: 8),
-        _buildTeamRow(context, match.teamB, match.scoreB), // Use FetchedMatch scores
+        _buildTeamRow(context, match.teamB, match.scoreB),
         const SizedBox(height: 12),
         Text(
-          match.result ?? 'Match Finished', // Use the result text from DB
+          match.result ?? 'Match Finished',
           style: TextStyle(
               color: Theme.of(context).primaryColor,
               fontWeight: FontWeight.bold,
@@ -406,9 +381,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       ],
     );
   }
-  // --- End NEW ---
 
-  // --- Uses FetchedMatch now (same as admin screen) ---
   Widget _buildLiveMatchContent(BuildContext context, FetchedMatch match) {
      return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,8 +391,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
           child: Row(
              mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Team Names Column
-              Flexible( // Added Flexible
+              Flexible(
                 child: Column(
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
@@ -429,7 +401,6 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
                   ],
                 ),
               ),
-              // Scores Column
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -450,7 +421,6 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     );
   }
 
-  // --- Uses FetchedMatch now (same as admin screen) ---
   Widget _buildUpcomingMatchContent(BuildContext context, FetchedMatch match) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -493,13 +463,11 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     );
   }
 
-  // --- Updated _buildCardHeader (same as admin screen) ---
   Widget _buildCardHeader(BuildContext context, String category, String matchStatus) {
       Color headerColor;
       Color textColor;
-      String displayText = category.toUpperCase(); // Default display text
+      String displayText = category.toUpperCase();
 
-      // Determine color and text based on actual match status
       switch (matchStatus) {
         case 'live':
           headerColor = Colors.red.shade100;
@@ -511,15 +479,15 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
           textColor = Colors.blue.shade800;
            displayText = 'UPCOMING';
           break;
-         case 'finished': // Use 'finished' status for Recent
+         case 'finished':
           headerColor = Colors.grey.shade200;
           textColor = Colors.grey.shade700;
-           displayText = 'RECENT'; // Display as 'RECENT'
+           displayText = 'RECENT';
           break;
-        default: // Fallback for unexpected statuses
+        default:
           headerColor = Colors.grey.shade200;
           textColor = Colors.grey.shade700;
-          displayText = matchStatus.toUpperCase(); // Show the actual status if unknown
+          displayText = matchStatus.toUpperCase();
       }
 
     return Row(
@@ -536,7 +504,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            displayText, // Use the determined display text
+            displayText,
             style: TextStyle(
               color: textColor,
               fontWeight: FontWeight.bold,
@@ -547,16 +515,14 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       ],
     );
   }
- // --- End Updated _buildCardHeader ---
 
- // --- NEW: Build Team Row (same as admin screen) ---
  Widget _buildTeamRow(BuildContext context, String name, String score) {
     return Row(
       children: [
         CircleAvatar(
           radius: 12,
           backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
-          child: Text(name.isNotEmpty ? name.substring(0, 1) : '?', // Handle empty name
+          child: Text(name.isNotEmpty ? name.substring(0, 1) : '?',
               style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).primaryColor)),
@@ -566,7 +532,7 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
             child: Text(name,
                 style: const TextStyle(
                     fontWeight: FontWeight.bold, fontSize: 16))),
-        Text(score, // Score is already formatted by backend
+        Text(score,
             style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
@@ -574,19 +540,16 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       ],
     );
   }
-  // --- END NEW ---
 
- // --- Bottom Nav Bar remains the same ---
   Widget _buildBottomNavigationBar(BuildContext context) {
     return BottomNavigationBar(
-      currentIndex: 0, // Default to home
+      currentIndex: 0,
       onTap: (index) {
         if (index == 0) {
-          Navigator.of(context).pop(); // Go back to home screen
+          Navigator.of(context).pop();
         } else if (index == 3) {
-          widget.onGenderToggle(!widget.isForBoys); // Toggle gender
+          widget.onGenderToggle(!widget.isForBoys);
         }
-        // Add navigation for Schedule or Leaderboard if needed
       },
       items: [
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

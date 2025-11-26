@@ -162,7 +162,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   Future<void> _loadExistingLiveState() async {
      setState(() => _isLoadingPlayers = true); // Show loading indicator while fetching state
      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
-     final String apiUrl = 'http://$host:5000/api/get_live_updates/${widget.matchId}';
+     
+     // --- CRITICAL FIX: Changed URL from get_live_updates to get_live_score ---
+     final String apiUrl = 'http://$host:5000/api/get_live_score/${widget.matchId}'; 
+     // ------------------------------------------------------------------------
 
      try {
         final response = await http.get(Uri.parse(apiUrl));
@@ -216,7 +219,18 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                 _tossDecision = loadedData['toss_decision'] == 'Bat' ? TossDecision.Bat : (loadedData['toss_decision'] == 'Bowl' ? TossDecision.Bowl : null);
                 _matchStatusText = loadedData['current_status'] ?? "Live";
                 _summaryText = loadedData['summary_text'] ?? "Match in progress.";
-                _isFirstInnings = loadedData['is_first_innings'] ?? true;
+                
+                // --- FIX: Handle Integer vs Boolean mismatch for is_first_innings ---
+                if (loadedData['is_first_innings'] != null) {
+                    if (loadedData['is_first_innings'] is bool) {
+                       _isFirstInnings = loadedData['is_first_innings'];
+                    } else {
+                       _isFirstInnings = loadedData['is_first_innings'] == 1;
+                    }
+                } else {
+                    _isFirstInnings = true;
+                }
+                
                 _targetScore = loadedData['target_score'] ?? -1;
                 _firstInningsValidBallsBowled = loadedData['first_innings_balls'] ?? 0;
                 _teamARuns = loadedData['team1_runs'] ?? 0; _teamAWickets = loadedData['team1_wickets'] ?? 0; _teamABalls = loadedData['team1_balls'] ?? 0;
@@ -271,7 +285,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                          // Over just finished. Next ball is start of new over.
                          _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                          _currentBallNumberInOver = 1;
-                          print("Load State: Detected start of new over ($_currentOverNumber) as previous over just finished.");
                          _ballsThisOverDisplay = []; // Clear display for new over
                     } else {
                          // Over is in progress
@@ -330,8 +343,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                      _summaryText = "$_battingTeamName is batting.";
                  }
 
-
-                 print("Loaded existing live state successfully. Phase: $_currentPhase");
             });
         } else if (mounted && response.statusCode == 404) {
             print("No existing live update data found for match ${widget.matchId}. Starting fresh.");

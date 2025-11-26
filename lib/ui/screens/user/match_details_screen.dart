@@ -61,8 +61,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     });
     try {
       const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      // UPDATED: Pass sportName query parameter to avoid ID collision
       final response = await http.get(
-          Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
+          Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}?sport=${widget.sportName}'));
 
       if (mounted) {
         if (response.statusCode == 200) {
@@ -95,8 +96,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     setState(() => _isLoading = true);
     try {
       const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      // UPDATED: Pass sportName query parameter so backend starts the correct match
       final response = await http
-          .post(Uri.parse('http://$host:5000/api/start_match/${widget.matchId}'));
+          .post(Uri.parse('http://$host:5000/api/start_match/${widget.matchId}?sport=${widget.sportName}'));
 
       if (mounted) {
         if (response.statusCode == 200) {
@@ -104,7 +106,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             const SnackBar(content: Text('Match is now live!'), backgroundColor: Colors.green),
           );
           
-          // Determine which screen to navigate to based on sport
           Widget nextScreen;
           if (widget.sportName == 'Football') {
             nextScreen = LiveFootballScoreScreen(
@@ -126,7 +127,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             );
           }
 
-          // Replace the current details screen with the live score screen
           Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => nextScreen));
 
         } else {
@@ -151,24 +151,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   
   Map<String, int> _getSportPlayerCounts(String sportName) {
     switch (sportName) {
-      case 'Cricket':
-        return {'players': 11, 'subs': 4};
-      case 'Football':
-        return {'players': 11, 'subs': 5};
-      case 'Kabaddi':
-        return {'players': 7, 'subs': 3};
-      case 'Volleyball':
-        return {'players': 6, 'subs': 2};
-      case 'Table Tennis':
-      case 'Badminton':
-      case 'Carrom':
-      case 'Chess':
-        return {'players': 5, 'subs': 0};
-      default:
-        return {'players': 1, 'subs': 0}; 
+      case 'Cricket': return {'players': 11, 'subs': 4};
+      case 'Football': return {'players': 11, 'subs': 5};
+      default: return {'players': 1, 'subs': 0}; 
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +199,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             controller: _tabController,
             children: [
               _buildInfoTab(),
-              _buildPlayerListTab(_matchDetails!['team_a_name'], List<String>.from(_matchDetails!['team_a_players'])),
-              _buildPlayerListTab(_matchDetails!['team_b_name'], List<String>.from(_matchDetails!['team_b_players'])),
+              _buildPlayerListTab(_matchDetails!['team_a_name'], List<String>.from(_matchDetails!['team_a_players'] ?? [])),
+              _buildPlayerListTab(_matchDetails!['team_b_name'], List<String>.from(_matchDetails!['team_b_players'] ?? [])),
             ],
           ),
         ),
@@ -303,19 +290,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 const Divider(),
                _buildInfoRow(Icons.location_on_outlined, 'Venue', _matchDetails!['venue']),
                 const Divider(),
-               // Dynamically display Referee/Umpires
                _buildInfoRow(Icons.sports, isFootball ? 'Referees' : 'Umpires', 
                   isFootball 
-                    ? (_matchDetails!['referees'] as List).join(', ')
-                    : (_matchDetails!['umpires'] as List).join(', ')),
+                    ? (_matchDetails!['referees'] as List? ?? []).join(', ')
+                    : (_matchDetails!['umpires'] as List? ?? []).join(', ')),
                 const Divider(),
-               // Dynamically display Duration/Overs
                _buildInfoRow(
                  isFootball ? Icons.timer : Icons.sports_cricket_outlined, 
                  isFootball ? 'Duration' : 'Overs', 
                  isFootball 
                     ? "${_matchDetails!['match_duration']} mins"
-                    : _matchDetails!['overs_per_innings'].toString()
+                    : "${_matchDetails!['overs_per_innings']}"
                ),
             ],
           ),
