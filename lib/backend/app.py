@@ -84,13 +84,39 @@ def add_cricket_match():
         if cur: cur.close()
         if conn: conn.close()
 
-# --- [KEEP OTHER ADD MATCH ROUTES HERE IF NEEDED] ---
-# (Football, Kabaddi, etc. code remains same as your original, omitted here for brevity but ensure they are present in your file)
+@app.route('/api/add_football_match', methods=['POST'])
+def add_football_match():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
+    cur = None
+    try:
+        cur = conn.cursor()
+        team_a_players = json.dumps(data.get('team_a_players', []))
+        team_b_players = json.dumps(data.get('team_b_players', []))
+        referees = json.dumps(data.get('referees', []))
+        
+        sql = """INSERT INTO football_match 
+                 (team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, referees, match_status) 
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"""
+        
+        vals = (data['team_a_name'], data['team_b_name'], team_a_players, team_b_players, int(data.get('match_duration', 90)), data['start_time'], data['venue'], referees)
+        cur.execute(sql, vals)
+        new_id = cur.lastrowid
+        
+        # Initialize football livescore table with default 0-0 score
+        cur.execute("INSERT INTO football_match_livescore (match_id, team_a_goals, team_b_goals, match_time, current_half, match_status) VALUES (%s, 0, 0, '00:00', '1st Half', 'upcoming')", (new_id,))
+        conn.commit()
+        return jsonify({"status": "success", "match_id": new_id}), 201
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 @app.route('/api/get_matches/<sport_name>', methods=['GET'])
 def get_matches(sport_name):
-    # (Your original get_matches code logic here - mostly fine)
-    # ... Ensure you close connections in finally block ...
     status_param = request.args.get('status', 'upcoming')
     matches = []
     conn = get_db_connection()
@@ -101,21 +127,47 @@ def get_matches(sport_name):
         sport = sport_name.lower()
         db_status = 'finished' if status_param == 'recent' else status_param
         
+        # Determine Sort Order: Recent = Newest First (DESC), Upcoming/Live = Oldest First (ASC)
+        sort_order = "DESC" if status_param == 'recent' else "ASC"
+        
         if sport == 'cricket':
-            sql = """SELECT cm.match_id, cm.team_a_name, cm.team_b_name, cm.venue, cm.start_time, cm.match_status,
-                       ls.team1_runs, ls.team1_wickets, ls.team2_runs, ls.team2_wickets
+            sql = f"""SELECT cm.match_id, cm.team_a_name, cm.team_b_name, cm.venue, cm.start_time, cm.match_status,
+                       ls.team1_runs, ls.team1_wickets, ls.team2_runs, ls.team2_wickets, ls.summary_text
                 FROM cricket_match cm LEFT JOIN cricket_match_livescore ls ON cm.match_id = ls.match_id
-                WHERE cm.match_status = %s ORDER BY cm.start_time ASC"""
+                WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}"""
             cur.execute(sql, (db_status,))
             rows = cur.fetchall()
             for row in rows:
+                result_text = row[10] if row[10] else "Match Finished"
                 matches.append({
                     "id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], 
                     "date": row[4].strftime('%b %d') if row[4] else '', "time": row[4].strftime('%I:%M %p') if row[4] else '', 
                     "status": row[5], 
-                    "scoreA": f"{row[6] or 0}/{row[7] or 0}", "scoreB": f"{row[8] or 0}/{row[9] or 0}"
+                    "scoreA": f"{row[6] or 0}/{row[7] or 0}", "scoreB": f"{row[8] or 0}/{row[9] or 0}",
+                    "result": result_text
                 })
-        # ... (Include other sports logic) ...
+        
+        elif sport == 'football':
+            sql = f"""SELECT fm.match_id, fm.team_a_name, fm.team_b_name, fm.venue, fm.start_time, fm.match_status,
+                       fls.team_a_goals, fls.team_b_goals FROM football_match fm LEFT JOIN football_match_livescore fls ON fm.match_id = fls.match_id
+                WHERE fm.match_status = %s ORDER BY fm.start_time {sort_order}"""
+            cur.execute(sql, (db_status,))
+            rows = cur.fetchall()
+            for row in rows:
+                score_a = row[6] or 0
+                score_b = row[7] or 0
+                result_text = "Draw"
+                if score_a > score_b: result_text = f"{row[1]} won"
+                elif score_b > score_a: result_text = f"{row[2]} won"
+                
+                matches.append({
+                    "id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], 
+                    "date": row[4].strftime('%b %d') if row[4] else '', "time": row[4].strftime('%I:%M %p') if row[4] else '', 
+                    "status": row[5], 
+                    "scoreA": str(score_a), "scoreB": str(score_b),
+                    "result": result_text
+                })
+        
         return jsonify(matches)
     except Exception as e:
         print("Error fetching matches:", e)
@@ -129,20 +181,34 @@ def get_match_details(match_id):
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error", "message": "Connection failed"}), 500
     cur = None
+    sport = request.args.get('sport', 'Cricket') 
+    
     try:
         cur = conn.cursor()
-        # ... (Your original logic to fetch details) ...
-        # Simplified for brevity in this fix:
-        cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, overs_per_innings, start_time, venue, umpires, match_status FROM cricket_match WHERE match_id = %s", (match_id,))
-        match = cur.fetchone()
-        if match:
-             return jsonify({ 
-                 "id": match[0], "team_a_name": match[1], "team_b_name": match[2], 
-                 "team_a_players": parse_json_col(match[3]), "team_b_players": parse_json_col(match[4]), 
-                 "overs_per_innings": match[5], "start_time": match[6].isoformat(), 
-                 "venue": match[7], "umpires": parse_json_col(match[8]), 
-                 "match_status": match[9], "sport": "Cricket" 
-             })
+        
+        if sport == 'Football':
+             cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, referees, match_status FROM football_match WHERE match_id = %s", (match_id,))
+             match = cur.fetchone()
+             if match:
+                 return jsonify({ 
+                     "id": match[0], "team_a_name": match[1], "team_b_name": match[2], 
+                     "team_a_players": parse_json_col(match[3]), "team_b_players": parse_json_col(match[4]), 
+                     "match_duration": match[5], "start_time": match[6].isoformat(), 
+                     "venue": match[7], "referees": parse_json_col(match[8]), 
+                     "match_status": match[9], "sport": "Football" 
+                 })
+        else: 
+            cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, overs_per_innings, start_time, venue, umpires, match_status FROM cricket_match WHERE match_id = %s", (match_id,))
+            match = cur.fetchone()
+            if match:
+                 return jsonify({ 
+                     "id": match[0], "team_a_name": match[1], "team_b_name": match[2], 
+                     "team_a_players": parse_json_col(match[3]), "team_b_players": parse_json_col(match[4]), 
+                     "overs_per_innings": match[5], "start_time": match[6].isoformat(), 
+                     "venue": match[7], "umpires": parse_json_col(match[8]), 
+                     "match_status": match[9], "sport": "Cricket" 
+                 })
+                 
         return jsonify({"status": "error", "message": "Match not found"}), 404
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -150,30 +216,62 @@ def get_match_details(match_id):
         if cur: cur.close()
         if conn: conn.close()
 
-# --- FIXED UPDATE ROUTE ---
+@app.route('/api/start_match/<int:match_id>', methods=['POST'])
+def start_match(match_id):
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error", "message": "Connection failed"}), 500
+    cur = None
+    sport = request.args.get('sport', 'Cricket')
+    try:
+        cur = conn.cursor()
+        table_name = 'football_match' if sport == 'Football' else 'cricket_match'
+        
+        cur.execute(f"UPDATE {table_name} SET match_status = 'live' WHERE match_id = %s", (match_id,))
+        
+        ls_table = 'football_match_livescore' if sport == 'Football' else 'cricket_match_livescore'
+        
+        cur.execute(f"SELECT match_id FROM {ls_table} WHERE match_id = %s", (match_id,))
+        if not cur.fetchone():
+             if sport == 'Football':
+                 cur.execute(f"INSERT INTO {ls_table} (match_id, team_a_goals, team_b_goals, match_time, current_half, match_status) VALUES (%s, 0, 0, '00:00', '1st Half', 'live')", (match_id,))
+             else:
+                 cur.execute("SELECT team_a_name, team_b_name FROM cricket_match WHERE match_id = %s", (match_id,))
+                 names = cur.fetchone()
+                 if names:
+                    cur.execute(f"INSERT INTO {ls_table} (match_id, team1_name, team2_name, current_status) VALUES (%s, %s, %s, 'live')", (match_id, names[0], names[1]))
+        else:
+             if sport == 'Football':
+                 cur.execute(f"UPDATE {ls_table} SET match_status = 'live' WHERE match_id = %s", (match_id,))
+             else:
+                 cur.execute(f"UPDATE {ls_table} SET current_status = 'live' WHERE match_id = %s", (match_id,))
+
+        conn.commit()
+        return jsonify({"status": "success", "message": "Match started"}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+# --- CRICKET SCORE ENDPOINTS ---
 @app.route('/api/update_live_score/<int:match_id>', methods=['POST'])
 def update_live_score(match_id):
     data = request.get_json()
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
-    
-    cur = None # Safe initialization
+    cur = None
     try:
         cur = conn.cursor()
-        
         update_fields = []
         params = []
-        
-        # Keys to exclude from automatic mapping (handled manually or ignored)
         excluded_keys = ['match_id', 'team1_timeline', 'team2_timeline', 'team1_batting', 'team2_bowling', 'team2_batting', 'team1_bowling']
 
         for key, value in data.items():
             if key not in excluded_keys:
-                # Add to query
                 update_fields.append(f"{key} = %s")
                 params.append(value)
         
-        # --- Handle Complex JSON fields Manually ---
         if 'team1_batting' in data:
             update_fields.append("team1_batting_stats = %s")
             params.append(json.dumps(data['team1_batting']))
@@ -186,8 +284,6 @@ def update_live_score(match_id):
         if 'team1_bowling' in data:
             update_fields.append("team1_bowling_stats = %s")
             params.append(json.dumps(data['team1_bowling']))
-            
-        # --- FIX: Handle Timelines (was missing in original) ---
         if 'team1_timeline' in data:
             update_fields.append("team1_timeline = %s")
             params.append(json.dumps(data['team1_timeline']))
@@ -201,19 +297,16 @@ def update_live_score(match_id):
             sql = f"UPDATE cricket_match_livescore SET {', '.join(update_fields)}, last_updated = NOW() WHERE match_id = %s"
             cur.execute(sql, tuple(params))
             
-            # Also update main table status if needed
             if 'current_status' in data:
                 status = data['current_status']
-                if status in ['live', 'finished', 'upcoming']:
-                    cur.execute("UPDATE cricket_match SET match_status = %s WHERE match_id = %s", (status, match_id))
+                if status.lower() in ['live', 'finished', 'upcoming']:
+                    cur.execute("UPDATE cricket_match SET match_status = %s WHERE match_id = %s", (status.lower(), match_id))
 
             conn.commit()
-            
         return jsonify({"status": "success", "message": "Live score updated"}), 200
     except Exception as e:
         if conn: conn.rollback()
-        print("Update Error:")
-        traceback.print_exc() # Print full error to console for debugging
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if cur: cur.close()
@@ -259,7 +352,82 @@ def get_live_score(match_id):
         if cur: cur.close()
         if conn: conn.close()
 
-# --- NEW: PDF DOWNLOAD ROUTE ---
+# --- FOOTBALL SCORE ENDPOINTS (Updated) ---
+
+@app.route('/api/get_football_live_score/<int:match_id>', methods=['GET'])
+def get_football_live_score(match_id):
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
+    cur = None
+    try:
+        cur = conn.cursor(dictionary=True)
+        # UPDATED: Fetch player lists from football_match using JOIN
+        cur.execute("""
+            SELECT ls.*, fm.match_duration, fm.team_a_players, fm.team_b_players
+            FROM football_match_livescore ls
+            JOIN football_match fm ON ls.match_id = fm.match_id
+            WHERE ls.match_id = %s
+        """, (match_id,))
+        row = cur.fetchone()
+        
+        if not row:
+             return jsonify({"status": "error", "message": "Match data not initialized"}), 404
+
+        # Parse JSON columns
+        row['team_a_players'] = parse_json_col(row.get('team_a_players'))
+        row['team_b_players'] = parse_json_col(row.get('team_b_players'))
+        row['team_a_goal_details'] = parse_json_col(row.get('team_a_goal_details'))
+        row['team_b_goal_details'] = parse_json_col(row.get('team_b_goal_details'))
+
+        return jsonify(row), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route('/api/update_football_score/<int:match_id>', methods=['POST'])
+def update_football_score(match_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
+    cur = None
+    try:
+        cur = conn.cursor()
+        
+        # UPDATED: Added goal details columns
+        sql = """UPDATE football_match_livescore 
+                 SET team_a_goals = %s, team_b_goals = %s, 
+                     team_a_fouls = %s, team_b_fouls = %s,
+                     team_a_freekicks = %s, team_b_freekicks = %s,
+                     team_a_penalties = %s, team_b_penalties = %s,
+                     team_a_goal_details = %s, team_b_goal_details = %s,
+                     match_time = %s, current_half = %s, match_status = %s, last_updated = NOW() 
+                 WHERE match_id = %s"""
+        
+        vals = (
+            data['team_a_goals'], data['team_b_goals'], 
+            data.get('team_a_fouls', 0), data.get('team_b_fouls', 0),
+            data.get('team_a_freekicks', 0), data.get('team_b_freekicks', 0),
+            data.get('team_a_penalties', 0), data.get('team_b_penalties', 0),
+            json.dumps(data.get('team_a_goal_details', [])), json.dumps(data.get('team_b_goal_details', [])),
+            data['match_time'], data['current_half'], data['status'], match_id
+        )
+        cur.execute(sql, vals)
+        
+        if 'status' in data:
+             cur.execute("UPDATE football_match SET match_status = %s WHERE match_id = %s", (data['status'], match_id))
+             
+        conn.commit()
+        return jsonify({"status": "success", "message": "Football score updated"}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+# --- PDF DOWNLOAD ---
 @app.route('/api/download_scorecard_pdf/<int:match_id>', methods=['GET'])
 def download_scorecard_pdf(match_id):
     conn = get_db_connection()
@@ -267,40 +435,33 @@ def download_scorecard_pdf(match_id):
     cur = None
     try:
         cur = conn.cursor(dictionary=True)
-        # Fetch Match Data
         cur.execute("SELECT * FROM cricket_match WHERE match_id = %s", (match_id,))
         match = cur.fetchone()
         
-        # Fetch Live Score Data
         cur.execute("SELECT * FROM cricket_match_livescore WHERE match_id = %s", (match_id,))
         score = cur.fetchone()
         
         if not match or not score:
             return jsonify({"status": "error", "message": "Match data not found"}), 404
 
-        # Parse JSON Stats
         team1_batting = parse_json_col(score.get("team1_batting_stats"))
         team1_bowling = parse_json_col(score.get("team1_bowling_stats"))
         team2_batting = parse_json_col(score.get("team2_batting_stats"))
         team2_bowling = parse_json_col(score.get("team2_bowling_stats"))
 
-        # Create PDF Buffer
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         elements = []
         styles = getSampleStyleSheet()
 
-        # Title
         title = f"{match['team_a_name']} vs {match['team_b_name']}"
         elements.append(Paragraph(title, styles['Title']))
         elements.append(Paragraph(f"Venue: {match['venue']} | Status: {score['current_status']}", styles['Normal']))
         elements.append(Spacer(1, 12))
         
-        # Summary
         elements.append(Paragraph(f"Summary: {score['summary_text']}", styles['Heading2']))
         elements.append(Spacer(1, 12))
 
-        # Helper to build table data
         def build_batting_table(players):
             data = [['Batsman', 'Runs', 'Balls', 'Status']]
             for p in players:
@@ -316,7 +477,6 @@ def download_scorecard_pdf(match_id):
                     data.append([p.get('name', 'Unknown'), overs, p.get('runsConceded', 0), p.get('wicketsTaken', 0)])
             return data
 
-        # Team 1 Innings
         elements.append(Paragraph(f"{match['team_a_name']} Innings", styles['Heading3']))
         t1_bat_data = build_batting_table(team1_batting)
         if len(t1_bat_data) > 1:
@@ -326,7 +486,6 @@ def download_scorecard_pdf(match_id):
         
         elements.append(Spacer(1, 12))
         
-        # Team 2 Innings
         elements.append(Paragraph(f"{match['team_b_name']} Innings", styles['Heading3']))
         t2_bat_data = build_batting_table(team2_batting)
         if len(t2_bat_data) > 1:

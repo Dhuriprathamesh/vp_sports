@@ -28,23 +28,41 @@ class LiveFootballScoreScreen extends StatefulWidget {
 class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
   int _teamAGoals = 0;
   int _teamBGoals = 0;
+  
+  // New Stats
+  int _teamAFouls = 0;
+  int _teamBFouls = 0;
+  int _teamAFreeKicks = 0;
+  int _teamBFreeKicks = 0;
+  int _teamAPenalties = 0;
+  int _teamBPenalties = 0;
+
+  // Player Lists
+  List<String> _teamAPlayers = [];
+  List<String> _teamBPlayers = [];
+
+  // Goal Details: [{ 'player': 'Name', 'time': '12:30' }]
+  List<Map<String, dynamic>> _teamAGoalDetails = [];
+  List<Map<String, dynamic>> _teamBGoalDetails = [];
+
   String _matchTime = "00:00";
-  String _currentHalf = "1st Half"; // "1st Half" or "2nd Half"
+  String _currentHalf = "1st Half";
   bool _isMatchFinished = false;
   Timer? _pollingTimer;
-  Timer? _gameTimer; // Local timer for continuous running
+  Timer? _gameTimer;
   bool _isUpdating = false;
-  bool _showAdminControls = false; // Toggle to show/hide update buttons
-  int _totalSeconds = 0; // Track time in seconds for easier calculation
+  bool _showAdminControls = false;
+  int _totalSeconds = 0;
+  int _matchDuration = 90;
+  
+  // Pause State
+  bool _isGamePaused = false;
 
   @override
   void initState() {
     super.initState();
     _fetchLiveScore();
-    if (widget.isAdmin) {
-      // If admin, start the local game timer logic after initial fetch
-    } else {
-      // If viewer, poll server
+    if (!widget.isAdmin) {
       _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) => _fetchLiveScore());
     }
   }
@@ -59,7 +77,6 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
   void _parseTimeAndStartTimer() {
     if (_gameTimer != null && _gameTimer!.isActive) return;
     
-    // Parse the current _matchTime string (MM:SS) to seconds
     try {
       final parts = _matchTime.split(':');
       if (parts.length == 2) {
@@ -73,6 +90,8 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
   }
 
   void _startLocalTimer() {
+    if (_isGamePaused) return;
+
     _gameTimer?.cancel();
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
@@ -80,23 +99,39 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
         return;
       }
       
+      if (_totalSeconds >= _matchDuration * 60) {
+        timer.cancel();
+        _updateScore(manualSync: true);
+        return;
+      }
+
       setState(() {
         _totalSeconds++;
         _matchTime = _formatTime(_totalSeconds);
       });
 
-      // Logic for Halves
-      // Stop at 45:00 (2700 seconds) if it is 1st Half
-      if (_currentHalf == '1st Half' && _totalSeconds >= 2700) {
+      int halfDuration = (_matchDuration * 60) ~/ 2;
+      if (_currentHalf == '1st Half' && _totalSeconds >= halfDuration) {
         _gameTimer?.cancel();
-        _updateScore(manualSync: true); // Sync the stop state
+        _updateScore(manualSync: true);
       }
 
-      // Sync with server every 30 seconds automatically to keep viewers updated
       if (_totalSeconds % 30 == 0) {
         _updateScore(manualSync: false);
       }
     });
+  }
+
+  void _togglePauseMatch() {
+    setState(() {
+      _isGamePaused = !_isGamePaused;
+    });
+
+    if (_isGamePaused) {
+      _gameTimer?.cancel();
+    } else {
+      _startLocalTimer();
+    }
   }
 
   String _formatTime(int totalSeconds) {
@@ -114,19 +149,37 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
         final data = json.decode(response.body);
         if (mounted) {
           setState(() {
-            // Only update these if we aren't the admin currently running the timer
-            // Or if it's the initial load
-            if (!widget.isAdmin || _gameTimer == null) {
-               _teamAGoals = data['team_a_goals'];
-               _teamBGoals = data['team_b_goals'];
-               _matchTime = data['match_time'];
-               _currentHalf = data['current_half'];
-               _isMatchFinished = data['match_status'] == 'finished';
-               
-               if (widget.isAdmin && !_isMatchFinished && _gameTimer == null) {
-                 _parseTimeAndStartTimer();
-               }
-            }
+             _teamAGoals = data['team_a_goals'];
+             _teamBGoals = data['team_b_goals'];
+             _teamAFouls = data['team_a_fouls'] ?? 0;
+             _teamBFouls = data['team_b_fouls'] ?? 0;
+             _teamAFreeKicks = data['team_a_freekicks'] ?? 0;
+             _teamBFreeKicks = data['team_b_freekicks'] ?? 0;
+             _teamAPenalties = data['team_a_penalties'] ?? 0;
+             _teamBPenalties = data['team_b_penalties'] ?? 0;
+
+             // Fetch Players
+             _teamAPlayers = List<String>.from(data['team_a_players'] ?? []);
+             _teamBPlayers = List<String>.from(data['team_b_players'] ?? []);
+
+             // Fetch Goal Details
+             _teamAGoalDetails = List<Map<String, dynamic>>.from(data['team_a_goal_details'] ?? []);
+             _teamBGoalDetails = List<Map<String, dynamic>>.from(data['team_b_goal_details'] ?? []);
+
+             if (!widget.isAdmin || _gameTimer == null) {
+                 _matchTime = data['match_time'];
+                 if (!widget.isAdmin) {
+                    final parts = _matchTime.split(':');
+                    if (parts.length == 2) {
+                      _totalSeconds = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+                    }
+                 }
+             }
+             _currentHalf = data['current_half'];
+             _isMatchFinished = data['match_status'] == 'finished';
+             if (data['match_duration'] != null) {
+               _matchDuration = data['match_duration'];
+             }
           });
         }
       }
@@ -137,6 +190,8 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
 
   Future<void> _updateScore({bool finishMatch = false, bool manualSync = true}) async {
     if (!widget.isAdmin) return;
+    if (_isGamePaused && !finishMatch) return; 
+
     if (manualSync) setState(() => _isUpdating = true);
     
     const String host = kIsWeb ? 'localhost' : '10.0.2.2';
@@ -147,6 +202,14 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
         body: json.encode({
           'team_a_goals': _teamAGoals,
           'team_b_goals': _teamBGoals,
+          'team_a_fouls': _teamAFouls,
+          'team_b_fouls': _teamBFouls,
+          'team_a_freekicks': _teamAFreeKicks,
+          'team_b_freekicks': _teamBFreeKicks,
+          'team_a_penalties': _teamAPenalties,
+          'team_b_penalties': _teamBPenalties,
+          'team_a_goal_details': _teamAGoalDetails,
+          'team_b_goal_details': _teamBGoalDetails,
           'match_time': _matchTime,
           'current_half': _currentHalf,
           'status': finishMatch ? 'finished' : 'live'
@@ -164,24 +227,134 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
     }
   }
 
+  // --- Player Selection Dialog ---
+  Future<void> _showGoalScorerDialog(String teamName, bool isTeamA) async {
+    List<String> players = isTeamA ? _teamAPlayers : _teamBPlayers;
+    
+    if (players.isEmpty) {
+      // If no players are available, just update score without name
+      setState(() {
+        if (isTeamA) {
+           _teamAGoals++;
+           _teamAGoalDetails.add({'player': 'Unknown', 'time': _matchTime});
+        } else {
+           _teamBGoals++;
+           _teamBGoalDetails.add({'player': 'Unknown', 'time': _matchTime});
+        }
+        _updateScore();
+      });
+      return;
+    }
+
+    String? selectedPlayer;
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Select Goal Scorer ($teamName)"),
+          content: Container(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: players.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(players[index]),
+                  onTap: () {
+                    selectedPlayer = players[index];
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text("Cancel")
+            )
+          ],
+        );
+      }
+    );
+
+    if (selectedPlayer != null) {
+      setState(() {
+        if (isTeamA) {
+           _teamAGoals++;
+           _teamAGoalDetails.add({'player': selectedPlayer, 'time': _matchTime});
+        } else {
+           _teamBGoals++;
+           _teamBGoalDetails.add({'player': selectedPlayer, 'time': _matchTime});
+        }
+        _updateScore();
+      });
+    }
+  }
+
   void _startSecondHalf() {
+    if (_isGamePaused) return;
     setState(() {
       _currentHalf = "2nd Half";
-      // Ensure we start from 45:00 if somehow below
-      if (_totalSeconds < 2700) _totalSeconds = 2700; 
+      int halfDuration = (_matchDuration * 60) ~/ 2;
+      if (_totalSeconds < halfDuration) _totalSeconds = halfDuration; 
       _matchTime = _formatTime(_totalSeconds);
     });
     _startLocalTimer();
     _updateScore();
   }
 
+  // --- NEW FUNCTION: _addExtraTime ---
+  Future<void> _addExtraTime() async {
+    int? extraMins = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text("Add Extra Time (mins)"),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: "e.g. 5"),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(
+              onPressed: () {
+                int? val = int.tryParse(controller.text);
+                Navigator.pop(context, val);
+              },
+              child: const Text("Add"),
+            ),
+          ],
+        );
+      }
+    );
+
+    if (extraMins != null && extraMins > 0) {
+      setState(() {
+        _matchDuration += extraMins; // Extend total duration
+        _currentHalf = "Extra Time"; // Optional: Change half label
+        // No need to change _totalSeconds as it continues from where it stopped
+      });
+      _startLocalTimer(); // Resume/Start timer with new limit
+      _updateScore(); // Sync new state
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final gradientColors = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors;
 
+    // UPDATED: Dynamic Heading Logic
+    String titleText = "Football - Live Score";
+    if (_isMatchFinished) {
+      titleText = "Football - Recent";
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Football - Live Score"),
+        title: Text(titleText),
         elevation: 0,
         backgroundColor: Theme.of(context).primaryColor,
       ),
@@ -191,17 +364,17 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
         ),
-        child: SingleChildScrollView( // WRAPPED IN SCROLLVIEW TO FIX OVERFLOW
+        child: SingleChildScrollView(
           child: Column(
-            // Align content to top (start) instead of center
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const SizedBox(height: 20), // Top padding
+              const SizedBox(height: 20), 
               _buildScoreBoard(),
+
               const SizedBox(height: 30),
               
-              // Show Half-Time Message if needed
-              if (widget.isAdmin && _currentHalf == '1st Half' && _totalSeconds >= 2700)
+              // Show Half-Time Message
+              if (widget.isAdmin && !_isMatchFinished && _currentHalf == '1st Half' && _totalSeconds >= ((_matchDuration * 60) ~/ 2))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20.0),
                   child: Column(
@@ -217,34 +390,103 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
                   ),
                 ),
 
-              if (widget.isAdmin && !_isMatchFinished) ...[
-                 const SizedBox(height: 20),
-                 if (!_showAdminControls)
-                   Padding(
-                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                     child: ElevatedButton.icon(
-                       onPressed: () => setState(() => _showAdminControls = true),
-                       icon: const Icon(Icons.edit),
-                       label: const Text("Update Score / Manage"),
-                       style: ElevatedButton.styleFrom(
-                         minimumSize: const Size(double.infinity, 50),
-                         backgroundColor: Colors.white,
-                         foregroundColor: Theme.of(context).primaryColor
-                       ),
-                     ),
-                   ),
-                 if (_showAdminControls) _buildAdminControls(),
-                 const SizedBox(height: 20),
-              ],
+              // Admin Controls Section
+              if (widget.isAdmin && !_isMatchFinished)
+                if (!_showAdminControls)
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() => _showAdminControls = true);
+                        if (_gameTimer == null || !_gameTimer!.isActive) {
+                           _parseTimeAndStartTimer();
+                        }
+                      },
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      label: const Text(
+                        "Update Score", 
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 55),
+                        backgroundColor: const Color(0xFF0A4F43), 
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 5,
+                      ),
+                    ),
+                  )
+                else
+                  _buildAdminControls(),
 
-              if (_isMatchFinished) 
-                const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text("MATCH FINISHED", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                ),
+              // REMOVED: "MATCH FINISHED" text from here, as it is now inside the card
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String _getWinnerResultText() {
+    if (_teamAGoals > _teamBGoals) {
+      return "${widget.teamAName} Won the match";
+    } else if (_teamBGoals > _teamAGoals) {
+      return "${widget.teamBName} Won the match";
+    } else {
+      return "Match Drawn";
+    }
+  }
+
+  Widget _buildTimeBar() {
+    // UPDATED: Hide time bar if match is finished
+    if (_isMatchFinished) return const SizedBox.shrink();
+
+    int totalMatchSeconds = _matchDuration * 60;
+    if (totalMatchSeconds == 0) totalMatchSeconds = 1; 
+    double progress = (_totalSeconds / totalMatchSeconds).clamp(0.0, 1.0);
+
+    return Container(
+      height: 16, 
+      margin: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double barWidth = constraints.maxWidth;
+          final double progressWidth = barWidth * progress;
+
+          return Stack(
+            alignment: Alignment.centerLeft,
+            clipBehavior: Clip.none, 
+            children: [
+              Container(
+                width: double.infinity,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00838F), 
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              Container(
+                width: progressWidth,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              Positioned(
+                left: (progressWidth - 8).clamp(0.0, barWidth - 16), 
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFFFF8E1), 
+                    border: Border.all(color: const Color(0xFF001026), width: 3),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
       ),
     );
   }
@@ -255,25 +497,42 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+        padding: const EdgeInsets.only(top: 10, bottom: 20, left: 20, right: 20),
         child: Column(
           children: [
-            Text(_currentHalf.toUpperCase(), style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-            const SizedBox(height: 10),
-            Text(
-              _matchTime, 
-              style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, fontFamily: 'monospace')
-            ),
-            const SizedBox(height: 20),
+            // UPDATED: Logic to hide Live elements and show Result Text
+            if (_isMatchFinished) ...[
+               // 1. Result Text at Top
+               Text(
+                 _getWinnerResultText(),
+                 textAlign: TextAlign.center,
+                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)
+               ),
+               const SizedBox(height: 20),
+            ] else ...[
+               // 1. Live Elements
+               _buildTimeBar(),
+               const SizedBox(height: 10),
+               Text(_currentHalf.toUpperCase(), style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+               const SizedBox(height: 10),
+               Text(
+                 _matchTime, 
+                 style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, fontFamily: 'monospace')
+               ),
+               const SizedBox(height: 20),
+            ],
+
+            // 2. Scores (Common)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start, 
               children: [
-                Expanded(child: _buildTeamColumn(widget.teamAName, _teamAGoals)),
+                Expanded(child: _buildTeamColumn(widget.teamAName, _teamAGoals, _teamAGoalDetails)),
                 const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 15),
                   child: Text("-", style: TextStyle(fontSize: 40, color: Colors.grey)),
                 ),
-                Expanded(child: _buildTeamColumn(widget.teamBName, _teamBGoals)),
+                Expanded(child: _buildTeamColumn(widget.teamBName, _teamBGoals, _teamBGoalDetails)),
               ],
             ),
           ],
@@ -282,24 +541,43 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
     );
   }
 
-  Widget _buildTeamColumn(String name, int goals) {
+  Widget _buildTeamColumn(String name, int goals, List<Map<String, dynamic>> scorers) {
     return Column(
       children: [
         Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, maxLines: 2),
         const SizedBox(height: 10),
         Text(goals.toString(), style: TextStyle(fontSize: 48, color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        // Display Goal Scorers
+        if (scorers.isNotEmpty)
+          ...scorers.map((goal) => Text(
+            "${goal['player']} ${goal['time']}'",
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+            textAlign: TextAlign.center,
+          )).toList()
+        else
+          const SizedBox(height: 10), // Spacer to keep alignment
       ],
     );
   }
 
   Widget _buildAdminControls() {
+    // Determine if scoring buttons should be hidden
+    bool isHalfTime = _currentHalf == '1st Half' && _totalSeconds >= ((_matchDuration * 60) ~/ 2);
+    // Check if full time reached (but allow if paused so we can resume/add extra time)
+    bool isFullTime = _totalSeconds >= (_matchDuration * 60);
+    // Check if Extra Time has finished (Full time reached AND we are in Extra Time phase)
+    bool isExtraTimeFinished = isFullTime && _currentHalf == "Extra Time";
+
+    bool hideScoringButtons = _isGamePaused || isHalfTime || _isMatchFinished || isFullTime;
+
     return Container(
-      margin: const EdgeInsets.only(top: 20),
+      margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, -5))]
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -313,35 +591,116 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
           ),
           const Divider(),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildGoalButton("+1 Goal ${widget.teamAName}", () { setState(() => _teamAGoals++); _updateScore(); }),
-              _buildGoalButton("+1 Goal ${widget.teamBName}", () { setState(() => _teamBGoals++); _updateScore(); }),
-            ],
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            decoration: InputDecoration(
-              labelText: "Correct Time (e.g. 23:45)", 
-              filled: true, 
-              fillColor: Colors.grey.shade100,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              prefixIcon: const Icon(Icons.timer)
+          
+          // Conditionally show scoring buttons
+          if (!hideScoringButtons) ...[
+            // Goal Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildGoalButton("+1 Goal ${widget.teamAName}", () { 
+                  if(!_isGamePaused) _showGoalScorerDialog(widget.teamAName, true);
+                }),
+                _buildGoalButton("+1 Goal ${widget.teamBName}", () { 
+                  if(!_isGamePaused) _showGoalScorerDialog(widget.teamBName, false);
+                }),
+              ],
             ),
-            onSubmitted: (val) { 
-              setState(() {
-                 _matchTime = val; 
-                 // Recalculate seconds for timer
-                 final parts = val.split(':');
-                 if (parts.length == 2) {
-                    _totalSeconds = int.parse(parts[0]) * 60 + int.parse(parts[1]);
-                 }
-              }); 
-              _updateScore(); 
-            },
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 10),
+
+            // Foul Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildGoalButton("+1 Foul ${widget.teamAName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamAFouls++); _updateScore(); } 
+                }),
+                _buildGoalButton("+1 Foul ${widget.teamBName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamBFouls++); _updateScore(); }
+                }),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Free Kick Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildGoalButton("+1 FK ${widget.teamAName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamAFreeKicks++); _updateScore(); } 
+                }),
+                _buildGoalButton("+1 FK ${widget.teamBName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamBFreeKicks++); _updateScore(); }
+                }),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Penalty Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildGoalButton("+1 Pen ${widget.teamAName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamAPenalties++); _updateScore(); } 
+                }),
+                _buildGoalButton("+1 Pen ${widget.teamBName}", () { 
+                  if(!_isGamePaused) { setState(() => _teamBPenalties++); _updateScore(); }
+                }),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ] else ...[
+             // Optional placeholder when buttons are hidden
+             Padding(
+               padding: const EdgeInsets.symmetric(vertical: 20.0),
+               child: Text(
+                 _isGamePaused ? "Match Paused" : (isHalfTime ? "Half Time - Controls Locked" : (isFullTime ? "Full Time Reached" : "Match Finished")),
+                 style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                 textAlign: TextAlign.center,
+               ),
+             ),
+          ],
+          
+          // --- NEW BUTTON: Extra Time (Shown only when full time reached and extra time not finished) ---
+          if (isFullTime && _currentHalf != "Extra Time") ...[
+             SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _addExtraTime,
+                icon: const Icon(Icons.add_alarm, color: Colors.white),
+                label: const Text("Extra Time"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          // Pause/Resume Button
+          // Hide if Extra Time is finished (or Match is finished)
+          if (!isExtraTimeFinished && !_isMatchFinished) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _togglePauseMatch,
+                  icon: Icon(_isGamePaused ? Icons.play_arrow : Icons.pause, color: Colors.white),
+                  label: Text(_isGamePaused ? "Resume Match" : "Pause Match"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isGamePaused ? Colors.green : Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+          ],
+          
+          // End Match Button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -367,9 +726,9 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
       ),
-      child: Text(label),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
     );
   }
 }

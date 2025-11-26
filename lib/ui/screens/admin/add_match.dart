@@ -354,7 +354,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       case 'Volleyball':
         return [
            Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: DropdownButtonFormField<String>(
-               value: _volleyballFormat, decoration: InputDecoration(labelText: 'Match Format', prefixIcon: Icon(Icons.sports_volleyball, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+               initialValue: _volleyballFormat, decoration: InputDecoration(labelText: 'Match Format', prefixIcon: Icon(Icons.sports_volleyball, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
                items: const [DropdownMenuItem(value: 'Best of 3 Sets', child: Text('Best of 3 Sets')), DropdownMenuItem(value: 'Best of 5 Sets', child: Text('Best of 5 Sets'))],
                onChanged: (val) => setState(() => _volleyballFormat = val!),
              )),
@@ -436,7 +436,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Padding(padding: const EdgeInsets.only(top: 20.0, bottom: 8.0), child: Text(title, style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 16)));
+    return Padding(padding: const EdgeInsets.only(top: 20.0, bottom: 8.0), child: Text(title, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 16)));
   }
 
   // Updated Input Field Style to match Image (White Box, Grey Border)

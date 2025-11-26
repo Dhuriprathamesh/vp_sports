@@ -851,8 +851,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                           backgroundColor: Colors.green,
                           ),
                       onPressed: () {
-                        // Ensure status is Finished before final save
-                        _matchStatusText = "Finished";
+                        // FIXED: Changed "Finished" to "finished" (lowercase)
+                        // This matches the backend validation: if status in ['live', 'finished', 'upcoming']
+                        _matchStatusText = "finished";
+                        
                         // Send the final state to the backend
                         _sendScoreUpdateToBackend();
                         // Update UI to finished state

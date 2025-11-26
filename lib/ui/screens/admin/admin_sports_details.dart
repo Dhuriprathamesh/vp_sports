@@ -355,9 +355,9 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
       itemBuilder: (context, index) {
         final match = matches[index];
         return GestureDetector(
+          // FIXED: Added logic for 'Recent' category to open scorecard
           onTap: () async {
-            if (category == 'Live') {
-              // ROUTING LOGIC FOR LIVE MATCHES
+            if (category == 'Live' || category == 'Recent') { // Allow Recent to open scorecard
               if (widget.sportName == 'Football') {
                  Navigator.of(context).push(
                   MaterialPageRoute(
@@ -365,7 +365,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
                       matchId: match.id,
                       teamAName: match.teamA,
                       teamBName: match.teamB,
-                      isAdmin: true,
+                      isAdmin: true, // Admins can still edit if needed, or set to false for view only
                       isForBoys: widget.isForBoys,
                     ),
                   ),
@@ -411,22 +411,75 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
   }
 
   Widget _buildMatchCard(BuildContext context, FetchedMatch match, String category) {
+    // --- ADDED: Material + InkWell Wrapper for Clickability ---
     return Card(
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.1),
       margin: const EdgeInsets.symmetric(vertical: 8),
+      clipBehavior: Clip.antiAlias, // Ensures ripple effect respects corners
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildCardHeader(context, category, match.status),
-            const SizedBox(height: 12),
-            if (category == 'Upcoming') _buildUpcomingMatchContent(context, match),
-            if (category == 'Live') _buildLiveMatchContent(context, match),
-            if (category == 'Recent') _buildRecentMatchContent(context, match),
-          ],
+      child: InkWell(
+        // InkWell wraps the content to capture taps on the entire card
+        onTap: () async {
+            // Re-using the exact logic from the GestureDetector above
+            if (category == 'Live' || category == 'Recent') {
+              if (widget.sportName == 'Football') {
+                 Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LiveFootballScoreScreen(
+                      matchId: match.id,
+                      teamAName: match.teamA,
+                      teamBName: match.teamB,
+                      isAdmin: true,
+                      isForBoys: widget.isForBoys,
+                    ),
+                  ),
+                ).then((_) => _refreshAllMatches());
+              } else {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LiveCricketScoreScreen(
+                      matchId: match.id,
+                      sportName: widget.sportName,
+                      teamAName: match.teamA,
+                      teamBName: match.teamB,
+                      isForBoys: widget.isForBoys,
+                      onGenderToggle: widget.onGenderToggle,
+                      isAdmin: true,
+                    ),
+                  ),
+                ).then((_) => _refreshAllMatches());
+              }
+            } else if (category == 'Upcoming') {
+              final bool? refresh = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (context) => MatchDetailsScreen(
+                    matchId: match.id,
+                    isAdmin: true,
+                    sportName: widget.sportName,
+                    sportIcon: widget.sportIcon,
+                    isForBoys: widget.isForBoys,
+                    onGenderToggle: widget.onGenderToggle,
+                  ),
+                ),
+              );
+              if (refresh == true) {
+                _refreshAllMatches();
+              }
+            }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildCardHeader(context, category, match.status),
+              const SizedBox(height: 12),
+              if (category == 'Upcoming') _buildUpcomingMatchContent(context, match),
+              if (category == 'Live') _buildLiveMatchContent(context, match),
+              if (category == 'Recent') _buildRecentMatchContent(context, match),
+            ],
+          ),
         ),
       ),
     );

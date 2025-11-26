@@ -16,8 +16,10 @@ import 'package:permission_handler/permission_handler.dart';
 // --- ADD CONDITIONAL WEB IMPORT ---
 import 'dart:html' as html; // Import dart:html for web downloads
 
-// --- Data Models for Player Stats ---
-// Simple class to hold parsed player stats from JSON
+// ==========================================
+// 1. DATA MODELS
+// ==========================================
+
 class PlayerScore {
   final int id;
   final String name;
@@ -41,8 +43,8 @@ class PlayerScore {
 
   factory PlayerScore.fromJson(Map<String, dynamic> json) {
     return PlayerScore(
-      id: json['id'] ?? 0, // Provide default id if missing
-      name: json['name'] ?? 'Unknown', // Provide default name
+      id: json['id'] ?? 0,
+      name: json['name'] ?? 'Unknown',
       runs: json['runs'] ?? 0,
       ballsFaced: json['ballsFaced'] ?? 0,
       status: json['status'] ?? 'Yet to bat',
@@ -52,21 +54,20 @@ class PlayerScore {
     );
   }
 
-  // Helper getters for display
   String get batsmanDisplayScore => "$runs ($ballsFaced)";
   String get bowlerDisplayFigures {
      int overs = ballsBowled ~/ 6;
      int ballsPart = ballsBowled % 6;
-     // --- FIX: Ensure overs display correctly for bowlers ---
      return "$wicketsTaken/$runsConceded ($overs.$ballsPart)";
-     // --- END FIX ---
   }
   bool get hasBatted => status != "Yet to bat";
   bool get isOut => status != "Yet to bat" && status != "Not Out";
   bool get hasBowled => ballsBowled > 0;
 }
-// --- End Data Models ---
 
+// ==========================================
+// 2. LIVE CRICKET SCORE VIEWER (The Details Screen)
+// ==========================================
 
 class LiveCricketScoreScreen extends StatefulWidget {
   final int matchId;
@@ -109,18 +110,20 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
   Timer? _pollingTimer;
   bool _isDetailsExpanded = false;
   int _selectedTeamIndex = 0; // 0 for Team A, 1 for Team B
-  // List<String> _timelineData = []; // Removed
-  List<String> _team1TimelineData = []; // Added
-  List<String> _team2TimelineData = []; // Added
+  
+  List<String> _team1TimelineData = []; 
+  List<String> _team2TimelineData = []; 
 
   bool _isDownloadingPdf = false; // Added for PDF download state
-
+  bool _isMatchFinished = false; // Added to track match status
 
   @override
   void initState() {
     super.initState();
     _fetchLiveScore(); // Initial fetch
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) { // Poll more frequently
+    
+    // Poll more frequently, but we will cancel this if match is finished
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       if (mounted) {
         _fetchLiveScore(isRefresh: true);
       }
@@ -144,7 +147,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     try {
       const String host = kIsWeb ? 'localhost' : '10.0.2.2';
       final response = await http.get(
-          // Use the get_live_score endpoint which now returns detailed data
           Uri.parse('http://$host:5000/api/get_live_score/${widget.matchId}'));
 
       if (mounted) {
@@ -154,12 +156,10 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
           // --- Parse Detailed Data ---
           List<PlayerScore> parsePlayerList(List<dynamic>? data) {
             if (data == null) return [];
-            // --- FIX: Ensure items are Maps before calling fromJson ---
             return data
                 .whereType<Map<String, dynamic>>() // Filter out non-map items
                 .map((item) => PlayerScore.fromJson(item))
                 .toList();
-            // --- END FIX ---
           }
           
           // --- FIX: Handle Integer vs Boolean mismatch for is_first_innings ---
@@ -172,6 +172,16 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             }
           }
 
+          // Check if match is finished to stop polling
+          bool isFinished = fetchedData['current_status']?.toLowerCase() == 'finished';
+          if (isFinished) {
+             _pollingTimer?.cancel();
+             // Auto-expand details for finished matches so user sees scorecard immediately
+             if (!_isDetailsExpanded && !isRefresh) { 
+                _isDetailsExpanded = true; 
+             }
+          }
+
           setState(() {
             _liveScoreData = fetchedData; // Store the raw map too
             _teamABatting = parsePlayerList(fetchedData['team1_batting']);
@@ -180,22 +190,20 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             _teamABowling = parsePlayerList(fetchedData['team1_bowling']);
             _teamAExtras = fetchedData['team1_extras'] ?? 0;
             _teamBExtras = fetchedData['team2_extras'] ?? 0;
-            _isFirstInnings = parsedIsFirstInnings; // Use the safely parsed boolean
-            // _timelineData = List<String>.from(fetchedData['timeline'] ?? []); // Removed
-            _team1TimelineData = List<String>.from(fetchedData['team1_timeline'] ?? []); // Added
-            _team2TimelineData = List<String>.from(fetchedData['team2_timeline'] ?? []); // Added
+            _isFirstInnings = parsedIsFirstInnings; 
+            _team1TimelineData = List<String>.from(fetchedData['team1_timeline'] ?? []);
+            _team2TimelineData = List<String>.from(fetchedData['team2_timeline'] ?? []);
             _isLoading = false;
-            _errorMessage = ''; // Clear error on success
+            _errorMessage = ''; 
+            _isMatchFinished = isFinished; // Update local state
           });
-          // --- End Parse Detailed Data ---
 
         } else {
           final error = json.decode(response.body)['message'] ?? 'Unknown error';
-           // Only update error if still loading or if it's a new error
           if (_isLoading || _errorMessage != 'Failed to load live score: $error') {
              setState(() {
                _errorMessage = 'Failed to load live score: $error';
-               _isLoading = false; // Stop loading on error
+               _isLoading = false; 
              });
           }
           print("Live Score Fetch Error ${response.statusCode}: $error");
@@ -203,12 +211,11 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       }
     } catch (e) {
       if (mounted) {
-         // Only update error if still loading or different error
          const errorMsg = 'Could not connect to the server.';
          if (_isLoading || _errorMessage != errorMsg) {
             setState(() {
               _errorMessage = errorMsg;
-              _isLoading = false; // Stop loading on error
+              _isLoading = false; 
             });
          }
         print("Live Score Connection Error: $e");
@@ -216,7 +223,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     }
   }
 
-  // --- NEW FUNCTION: PDF DOWNLOAD LOGIC (copied from admin screen) ---
+  // --- PDF DOWNLOAD LOGIC ---
   Future<void> _downloadPdf() async {
     setState(() => _isDownloadingPdf = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -245,9 +252,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Download started in browser.'), backgroundColor: Colors.green),
             );
-            // --- END WEB LOGIC ---
           } else {
-            // --- MOBILE DOWNLOAD LOGIC (Existing) ---
+            // --- MOBILE DOWNLOAD LOGIC ---
             var status = await Permission.storage.request();
             if (!status.isGranted) {
                if (await Permission.storage.isPermanentlyDenied) {
@@ -286,7 +292,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               ),
             );
             await OpenFile.open(savePath);
-             // --- END MOBILE LOGIC ---
           }
         } else {
           final error = json.decode(response.body)['message'] ?? 'Unknown error';
@@ -305,7 +310,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       }
     }
   }
-  // --- END NEW FUNCTION ---
 
   @override
   Widget build(BuildContext context) {
@@ -313,9 +317,15 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
         ? AppTheme.boysGradientColors
         : AppTheme.girlsGradientColors;
 
+    // Dynamic Title Logic
+    String titleStatus = "Live";
+    if (_isMatchFinished) {
+      titleStatus = "Recent";
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.sportName} - Live'),
+        title: Text('${widget.sportName} - $titleStatus'), // Updated title
         elevation: 0,
       ),
       body: AnimatedContainer(
@@ -364,15 +374,14 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
         ),
       );
     }
-    // Handle case where data might become null briefly during refresh? Unlikely but safe.
+    
     if (_liveScoreData == null) {
       return const Center(
           child: Text('Waiting for live score data...',
               style: TextStyle(color: Colors.black54, fontSize: 16)));
     }
 
-    final scoreData = _liveScoreData!; // Now we know it's not null
-    // final ballsForTimeline = _timelineData; // Removed
+    final scoreData = _liveScoreData!; 
 
     return RefreshIndicator(
       onRefresh: () => _fetchLiveScore(isRefresh: true),
@@ -384,8 +393,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildCombinedScorecard(scoreData), // Removed ballsForTimeline
-                   // Display error subtly if a refresh fails but old data exists
+                  _buildCombinedScorecard(scoreData), 
                    if (_errorMessage.isNotEmpty)
                      Padding(
                        padding: const EdgeInsets.only(top: 10.0),
@@ -399,8 +407,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               ),
             ),
           ),
-          // Only show button if isAdmin is true
-          if (widget.isAdmin) _buildAdminScoreButton(),
+          // FIXED: Hide update button if match is finished
+          if (widget.isAdmin && !_isMatchFinished) _buildAdminScoreButton(),
         ],
       ),
     );
@@ -408,7 +416,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
 
 
   Widget _buildCombinedScorecard(Map<String, dynamic> scoreData) {
-     final bool isFinished = scoreData['match_status_text']?.toLowerCase() == 'finished';
+     // Use current_status (which is what backend sends) instead of match_status_text
+     final bool isFinished = scoreData['current_status']?.toLowerCase() == 'finished';
 
      return Card(
       elevation: 2,
@@ -416,7 +425,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          _buildScoreboardContent(scoreData), // Uses _liveScoreData directly
+          _buildScoreboardContent(scoreData), 
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             child: Text(
@@ -429,7 +438,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             ),
           ),
           
-          // --- ADD THIS BUTTON IF FINISHED ---
           if (isFinished)
             Padding(
               padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
@@ -445,17 +453,15 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                 onPressed: _isDownloadingPdf ? null : _downloadPdf,
               ),
             ),
-          // --- END ADDED BUTTON ---
 
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Divider(),
           ),
-          _buildPlayerDetailsContent(scoreData), // Uses _liveScoreData directly
+          _buildPlayerDetailsContent(scoreData), 
           _buildExpandToggle(),
 
           AnimatedCrossFade(
-             // Remove timeline from collapsed view
              firstChild: const SizedBox(height: 16.0),
              secondChild: Padding( // Expanded View: Details + Timelines
                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -464,20 +470,18 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                    children: [
                      const Center(child: Text('Scorecard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87))),
                      const SizedBox(height: 8),
-                     _buildTeamToggle(), // Uses widget.teamAName/BName
+                     _buildTeamToggle(), 
                      const SizedBox(height: 12),
-                     // Call _buildDetailedScorecard with fetched data
-                     _buildDetailedScorecard(), // Now uses state lists
+                     _buildDetailedScorecard(), 
                     
-                    // Add two separate timelines
                     const SizedBox(height: 24),
                     _buildTimelineSection(
-                      '${_liveScoreData?['team_a_name'] ?? widget.teamAName} Innings',
+                      '${_liveScoreData?['team1_name'] ?? widget.teamAName} Innings',
                       _team1TimelineData,
                     ),
                     const SizedBox(height: 16),
                     _buildTimelineSection(
-                      '${_liveScoreData?['team_b_name'] ?? widget.teamBName} Innings',
+                      '${_liveScoreData?['team2_name'] ?? widget.teamBName} Innings',
                       _team2TimelineData,
                     ),
                     const SizedBox(height: 16),
@@ -516,19 +520,16 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
        children: <Widget>[
          Padding(
            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-           // Use fetched team names if available
-           child: Flexible(child: Text(_liveScoreData?['team_a_name'] ?? widget.teamAName, overflow: TextOverflow.ellipsis, maxLines: 1)),
+           child: Flexible(child: Text(_liveScoreData?['team1_name'] ?? widget.teamAName, overflow: TextOverflow.ellipsis, maxLines: 1)),
          ),
          Padding(
            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-           // Use fetched team names if available
-           child: Flexible(child: Text(_liveScoreData?['team_b_name'] ?? widget.teamBName, overflow: TextOverflow.ellipsis, maxLines: 1)),
+           child: Flexible(child: Text(_liveScoreData?['team2_name'] ?? widget.teamBName, overflow: TextOverflow.ellipsis, maxLines: 1)),
          ),
        ],
      );
-   }
+  }
 
-   // --- _buildDetailedScorecard uses state lists ---
    Widget _buildDetailedScorecard() {
         final headerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade800);
         const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
@@ -567,11 +568,9 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                    dataRowMaxHeight: 36,
                    headingRowColor: WidgetStateProperty.resolveWith<Color?>((_) => Colors.grey.shade200),
                    columns: [
-                       // --- FIX: Removed Flexible from DataColumn label ---
                        DataColumn(label: Text('Batter', style: headerStyle, overflow: TextOverflow.ellipsis)),
                        DataColumn(label: Text('R', style: headerStyle), numeric: true),
                        DataColumn(label: Text('B', style: headerStyle), numeric: true),
-                       // --- FIX: Removed Flexible from DataColumn label ---
                        DataColumn(label: Text('Status', style: headerStyle, overflow: TextOverflow.ellipsis)),
                    ],
                    rows: !matchStarted
@@ -625,7 +624,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                     dataRowMaxHeight: 32,
                     headingRowColor: WidgetStateProperty.resolveWith<Color?>((_) => Colors.grey.shade200),
                     columns: [
-                        // --- FIX: Removed Flexible from DataColumn label ---
                         DataColumn(label: Text('Bowler', style: headerStyle, overflow: TextOverflow.ellipsis)),
                         DataColumn(label: Text('O', style: headerStyle), numeric: true),
                         DataColumn(label: Text('R', style: headerStyle), numeric: true),
@@ -638,7 +636,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                          : bowlersToShow.map((player) {
                               return DataRow(cells: [
                                 DataCell(Text(player.name, style: cellStyle, overflow: TextOverflow.ellipsis)),
-                                // Calculate Overs string from ballsBowled
                                 DataCell(Text( "${player.ballsBowled ~/ 6}.${player.ballsBowled % 6}" , style: cellStyle)), // Display Overs.Balls
                                 DataCell(Text(player.runsConceded.toString(), style: cellStyle)),
                                 DataCell(Text(player.wicketsTaken.toString(), style: cellStyle)),
@@ -689,7 +686,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
   Widget _buildTimelineSection(String title, List<String> ballsForTimeline) {
     final Color titleColor = Colors.grey[700]!;
 
-    // Don't show if timeline is empty
     if (ballsForTimeline.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -825,13 +821,27 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
 
   // Scoreboard Content
   Widget _buildScoreboardContent(Map<String, dynamic> scoreData) {
-      String teamA = scoreData['team_a_name'] ?? widget.teamAName; // Use fetched name if available
-      String teamB = scoreData['team_b_name'] ?? widget.teamBName; // Use fetched name if available
-      String teamAScore = scoreData['team_a_score'] ?? '0/0';
-      String teamAOvers = scoreData['team_a_overs'] ?? '(0.0)';
-      String teamBScore = scoreData['team_b_score'] ?? '0/0';
-      String teamBOvers = scoreData['team_b_overs'] ?? '(0.0)';
-      String matchStatus = scoreData['match_status_text'] ?? 'Live';
+      // Use correct keys from Backend (team1_name vs team_a_name)
+      String teamA = scoreData['team1_name'] ?? widget.teamAName;
+      String teamB = scoreData['team2_name'] ?? widget.teamBName;
+      
+      // Manually construct score string since backend doesn't send formatted string
+      int t1Runs = scoreData['team1_runs'] ?? 0;
+      int t1Wickets = scoreData['team1_wickets'] ?? 0;
+      int t1Balls = scoreData['team1_balls'] ?? 0;
+      
+      int t2Runs = scoreData['team2_runs'] ?? 0;
+      int t2Wickets = scoreData['team2_wickets'] ?? 0;
+      int t2Balls = scoreData['team2_balls'] ?? 0;
+
+      String teamAScore = "$t1Runs/$t1Wickets";
+      String teamAOvers = "(${t1Balls ~/ 6}.${t1Balls % 6})";
+      
+      String teamBScore = "$t2Runs/$t2Wickets";
+      String teamBOvers = "(${t2Balls ~/ 6}.${t2Balls % 6})";
+      
+      // Use current_status instead of match_status_text
+      String matchStatus = scoreData['current_status'] ?? 'Live';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -900,12 +910,31 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
   Widget _buildPlayerDetailsContent(Map<String, dynamic> scoreData) {
       const Color textColor = Colors.black87;
       final Color titleColor = Colors.grey[700]!;
-      String bowlingTitle = scoreData['bowling_team_name'] != null && scoreData['bowling_team_name'].isNotEmpty
-        ? '${scoreData['bowling_team_name']} Bowling'
-        : 'Bowling';
-      String battingTitle = scoreData['batting_team_name'] != null && scoreData['batting_team_name'].isNotEmpty
-        ? '${scoreData['batting_team_name']} Batting'
-        : 'Batting';
+      
+      // Calculate Batting/Bowling Team Name
+      // We rely on toss logic if first innings, or swap if second
+      String team1 = scoreData['team1_name'] ?? widget.teamAName;
+      String team2 = scoreData['team2_name'] ?? widget.teamBName;
+      String tossWinner = scoreData['toss_winner'] ?? "";
+      String tossDecision = scoreData['toss_decision'] ?? "";
+      bool isFirstInnings = _isFirstInnings;
+      
+      String battingTeam = "";
+      String bowlingTeam = "";
+      
+      if (tossWinner.isNotEmpty) {
+          bool team1BattingFirst = (tossWinner == team1 && tossDecision == "Bat") || (tossWinner == team2 && tossDecision == "Bowl");
+          if (isFirstInnings) {
+              battingTeam = team1BattingFirst ? team1 : team2;
+              bowlingTeam = team1BattingFirst ? team2 : team1;
+          } else {
+              battingTeam = team1BattingFirst ? team2 : team1;
+              bowlingTeam = team1BattingFirst ? team1 : team2;
+          }
+      }
+      
+      String bowlingTitle = bowlingTeam.isNotEmpty ? '$bowlingTeam Bowling' : 'Bowling';
+      String battingTitle = battingTeam.isNotEmpty ? '$battingTeam Batting' : 'Batting';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -919,9 +948,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                 children: [
                   Text( bowlingTitle, style: TextStyle( fontSize: 16, fontWeight: FontWeight.bold, color: titleColor)),
                   const SizedBox(height: 12),
-                  _buildPlayerStat( context: context, name: scoreData['bowler_on_strike_name'] ?? 'N/A', stat: scoreData['bowler_on_strike_figures'] ?? '-', isBatting: false, textColor: textColor,),
-                  const SizedBox(height: 8),
-                  _buildPlayerStat( context: context, name: scoreData['bowler_off_strike_name'] ?? 'N/A', stat: scoreData['bowler_off_strike_figures'] ?? '-', isBatting: false, textColor: textColor,),
+                  _buildPlayerStat( context: context, name: _findPlayerName(scoreData['bowler_id'], _teamABowling + _teamBBowling), stat: "", isBatting: false, textColor: textColor,),
                 ],
               ),
             ),
@@ -932,15 +959,25 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                 children: [
                   Text( battingTitle, style: TextStyle( fontSize: 16, fontWeight: FontWeight.bold, color: titleColor)),
                   const SizedBox(height: 12),
-                  _buildPlayerStat( context: context, name: scoreData['batsman_on_strike_name'] ?? 'N/A', stat: scoreData['batsman_on_strike_score'] ?? '-', isBatting: true, textColor: textColor,),
+                  _buildPlayerStat( context: context, name: _findPlayerName(scoreData['striker_id'], _teamABatting + _teamBBatting), stat: "*", isBatting: true, textColor: textColor,),
                   const SizedBox(height: 8),
-                  _buildPlayerStat( context: context, name: scoreData['batsman_off_strike_name'] ?? 'N/A', stat: scoreData['batsman_off_strike_score'] ?? '-', isBatting: true, textColor: textColor,),
+                  _buildPlayerStat( context: context, name: _findPlayerName(scoreData['non_striker_id'], _teamABatting + _teamBBatting), stat: "", isBatting: true, textColor: textColor,),
                 ],
               ),
             ),
           ],
         ),
     );
+  }
+  
+  String _findPlayerName(dynamic id, List<PlayerScore> players) {
+      if (id == null) return "N/A";
+      int pid = (id is int) ? id : int.tryParse(id.toString()) ?? -1;
+      try {
+          return players.firstWhere((p) => p.id == pid).name;
+      } catch (e) {
+          return "N/A";
+      }
   }
 
   // Admin Score Button
@@ -954,8 +991,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
           Navigator.of(context).push(MaterialPageRoute(
            builder: (_) => AdminUpdateScoreScreen( // Use correct class name
              matchId: widget.matchId,
-             teamAName: _liveScoreData?['team_a_name'] ?? widget.teamAName, // Pass fetched names
-             teamBName: _liveScoreData?['team_b_name'] ?? widget.teamBName, // Pass fetched names
+             teamAName: _liveScoreData?['team1_name'] ?? widget.teamAName, 
+             teamBName: _liveScoreData?['team2_name'] ?? widget.teamBName, 
              isForBoys: widget.isForBoys,
            ),
          )).then((value) {
@@ -982,13 +1019,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       required String stat,
       required bool isBatting,
       required Color textColor}) {
-       String combinedText = "$name: $stat";
+       String combinedText = "$name $stat";
     if (name == 'N/A' || name.isEmpty) combinedText = "-";
-
-    // Add asterisk if the player is the striker
-     if (isBatting && _liveScoreData != null && name == _liveScoreData!['batsman_on_strike_name']) {
-       combinedText = "$name*: $stat"; // Add asterisk to striker name
-     }
 
     return Row(
       mainAxisAlignment: isBatting ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -1037,6 +1069,308 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       ],
     );
   }
- // End Bottom Navigation Bar
-
 } // End of _LiveCricketScoreScreenState
+
+
+// ==========================================
+// 3. MATCH LIST SCREEN (Schedule/Recent/Live List)
+// ==========================================
+
+class CricketMatchListScreen extends StatefulWidget {
+  final bool isForBoys;
+  final Function(bool) onGenderToggle;
+
+  const CricketMatchListScreen({
+    super.key,
+    required this.isForBoys,
+    required this.onGenderToggle,
+  });
+
+  @override
+  State<CricketMatchListScreen> createState() => _CricketMatchListScreenState();
+}
+
+class _CricketMatchListScreenState extends State<CricketMatchListScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // FIXED: AppTheme.boysColor/girlsColor don't exist. Use Theme.of(context).primaryColor or define colors.
+    // Using primaryColor is safe as theme is toggled at root.
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cricket Matches'),
+        backgroundColor: primaryColor,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          tabs: const [
+            Tab(text: 'Live'),
+            Tab(text: 'Upcoming'),
+            Tab(text: 'Recent'), // This tab shows finished matches
+          ],
+        ),
+        actions: [
+          Switch(
+            value: widget.isForBoys,
+            activeColor: Colors.white,
+            onChanged: widget.onGenderToggle,
+          ),
+        ],
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _MatchListTab(status: 'live', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
+          _MatchListTab(status: 'upcoming', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
+          _MatchListTab(status: 'recent', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
+        ],
+      ),
+    );
+  }
+}
+
+class _MatchListTab extends StatefulWidget {
+  final String status;
+  final bool isForBoys;
+  // ADDED: onGenderToggle needed for passing to details screen
+  final Function(bool) onGenderToggle;
+
+  const _MatchListTab({required this.status, required this.isForBoys, required this.onGenderToggle});
+
+  @override
+  State<_MatchListTab> createState() => _MatchListTabState();
+}
+
+class _MatchListTabState extends State<_MatchListTab> {
+  List<dynamic> _matches = [];
+  bool _isLoading = true;
+  String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMatches();
+  }
+
+  Future<void> _fetchMatches() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      // Calls backend to get matches based on status (live, upcoming, recent)
+      final response = await http.get(Uri.parse(
+          'http://$host:5000/api/get_matches/cricket?status=${widget.status}'));
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _matches = json.decode(response.body);
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to load matches';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Connection Error: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Center(
+          child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(_errorMessage, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 10),
+          ElevatedButton(
+              onPressed: _fetchMatches, child: const Text('Retry'))
+        ],
+      ));
+    }
+
+    if (_matches.isEmpty) {
+      return Center(
+          child: Text('No ${widget.status} matches found.',
+              style: const TextStyle(color: Colors.grey)));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchMatches,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(8.0),
+        itemCount: _matches.length,
+        itemBuilder: (context, index) {
+          final match = _matches[index];
+          return _buildMatchCard(context, match);
+        },
+      ),
+    );
+  }
+
+  Widget _buildMatchCard(BuildContext context, Map<String, dynamic> match) {
+    // --- ADDED: Material + InkWell Wrapper for Clickability ---
+    return Card(
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      clipBehavior: Clip.antiAlias, // Ensures ripple effect respects corners
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        // InkWell wraps the content to capture taps on the entire card
+        onTap: () {
+            // Logic to navigate
+            int? matchId;
+            if (match['id'] is int) {
+              matchId = match['id'];
+            } else if (match['id'] is String) {
+              matchId = int.tryParse(match['id']);
+            }
+
+            if (matchId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LiveCricketScoreScreen(
+                    matchId: matchId!,
+                    sportName: 'Cricket',
+                    teamAName: match['teamA'] ?? 'Team A',
+                    teamBName: match['teamB'] ?? 'Team B',
+                    isForBoys: widget.isForBoys,
+                    isAdmin: false, // User mode (View Only)
+                    onGenderToggle: widget.onGenderToggle, // Pass the toggle
+                  ),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error: Invalid Match ID')),
+              );
+            }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: match['status'] == 'live' ? Colors.red.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      match['status'].toString().toUpperCase(),
+                      style: TextStyle(
+                        color: match['status'] == 'live'
+                            ? Colors.red
+                            : Colors.grey[700],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    "${match['date']} ${match['time']}",
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(match['teamA'],
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        // Show scores if not upcoming
+                        if (widget.status != 'upcoming')
+                          Text(match['scoreA'] ?? '0/0',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text("VS",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.grey[400])),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(match['teamB'],
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        if (widget.status != 'upcoming')
+                          Text(match['scoreB'] ?? '0/0',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(match['venue'] ?? "Unknown Venue",
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

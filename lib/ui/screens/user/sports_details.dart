@@ -288,8 +288,9 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       itemBuilder: (context, index) {
         final match = matches[index];
         return GestureDetector(
+          // FIXED: Added logic for 'Recent' category to open scorecard
           onTap: () {
-            if (category == 'Live') {
+            if (category == 'Live' || category == 'Recent') { // Allow Recent to open scorecard
               // --- FIXED ROUTING LOGIC ---
               if (widget.sportName == 'Football') {
                 Navigator.of(context).push(
