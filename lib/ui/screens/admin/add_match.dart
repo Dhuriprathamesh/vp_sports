@@ -88,7 +88,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     setState(() => _isLoading = true);
 
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     final sportNameUrl = widget.sportName.toLowerCase();
     final String apiUrl = 'http://$host:5000/api/add_${sportNameUrl}_match';
     

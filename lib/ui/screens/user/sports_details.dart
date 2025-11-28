@@ -7,7 +7,9 @@ import '../../../core/app_theme.dart';
 import '../admin/admin_sports_details.dart' show FetchedMatch;
 import 'match_details_screen.dart';
 import '../common/live_cricket_score_screen.dart';
-import '../common/live_football_score_screen.dart'; // <-- IMPORT THIS
+import '../common/live_football_score_screen.dart';
+// --- ADD THIS IMPORT ---
+import '../common/live_kabaddi_score_screen.dart';
 
 class SportsDetailsScreen extends StatefulWidget {
   final String sportName;
@@ -62,7 +64,8 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     });
 
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      // REPLACE WITH YOUR IP
+      const String host = kIsWeb ? 'localhost' : '192.168.1.12';
       final sportNameUrl = widget.sportName.toLowerCase();
       final String apiUrl =
           'http://$host:5000/api/get_matches/$sportNameUrl?status=$status';
@@ -288,7 +291,6 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
       itemBuilder: (context, index) {
         final match = matches[index];
         return GestureDetector(
-          // FIXED: Added logic for 'Recent' category to open scorecard
           onTap: () {
             if (category == 'Live' || category == 'Recent') { // Allow Recent to open scorecard
               // --- FIXED ROUTING LOGIC ---
@@ -296,6 +298,18 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => LiveFootballScoreScreen(
+                      matchId: match.id,
+                      teamAName: match.teamA,
+                      teamBName: match.teamB,
+                      isAdmin: false, // User view
+                      isForBoys: widget.isForBoys,
+                    ),
+                  ),
+                ).then((_) => _refreshAllMatches());
+              } else if (widget.sportName == 'Kabaddi') { // --- FIX: Added Kabaddi Logic ---
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LiveKabaddiScoreScreen(
                       matchId: match.id,
                       teamAName: match.teamA,
                       teamBName: match.teamB,

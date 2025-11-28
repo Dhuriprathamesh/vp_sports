@@ -9,7 +9,9 @@ import 'add_match.dart';
 // MatchDetailsScreen is likely still needed for upcoming
 import '../user/match_details_screen.dart';
 import '../common/live_cricket_score_screen.dart';
-import '../common/live_football_score_screen.dart'; // <-- IMPORT NEW SCREEN
+import '../common/live_football_score_screen.dart';
+// --- ADD THIS IMPORT ---
+import '../common/live_kabaddi_score_screen.dart';
 
 // --- Data Model for Fetched Matches ---
 class FetchedMatch {
@@ -110,7 +112,8 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     });
 
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      // REPLACE WITH YOUR IP
+      const String host = kIsWeb ? 'localhost' : '192.168.1.12';
       final sportNameUrl = widget.sportName.toLowerCase();
       final String apiUrl =
           'http://$host:5000/api/get_matches/$sportNameUrl?status=$status';
@@ -355,54 +358,8 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
       itemBuilder: (context, index) {
         final match = matches[index];
         return GestureDetector(
-          // FIXED: Added logic for 'Recent' category to open scorecard
           onTap: () async {
-            if (category == 'Live' || category == 'Recent') { // Allow Recent to open scorecard
-              if (widget.sportName == 'Football') {
-                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveFootballScoreScreen(
-                      matchId: match.id,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isAdmin: true, // Admins can still edit if needed, or set to false for view only
-                      isForBoys: widget.isForBoys,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
-              } else {
-                // Default to Cricket
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveCricketScoreScreen(
-                      matchId: match.id,
-                      sportName: widget.sportName,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isForBoys: widget.isForBoys,
-                      onGenderToggle: widget.onGenderToggle,
-                      isAdmin: true,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
-              }
-            } else if (category == 'Upcoming') {
-              final bool? refresh = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                  builder: (context) => MatchDetailsScreen(
-                    matchId: match.id,
-                    isAdmin: true,
-                    sportName: widget.sportName,
-                    sportIcon: widget.sportIcon,
-                    isForBoys: widget.isForBoys,
-                    onGenderToggle: widget.onGenderToggle,
-                  ),
-                ),
-              );
-              if (refresh == true) {
-                _refreshAllMatches();
-              }
-            }
+            _handleMatchTap(context, match, category);
           },
           child: _buildMatchCard(context, match, category),
         );
@@ -410,63 +367,78 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     );
   }
 
+  // --- Extracted Navigation Logic to avoid duplication ---
+  void _handleMatchTap(BuildContext context, FetchedMatch match, String category) async {
+    if (category == 'Live' || category == 'Recent') {
+      if (widget.sportName == 'Football') {
+         Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => LiveFootballScoreScreen(
+              matchId: match.id,
+              teamAName: match.teamA,
+              teamBName: match.teamB,
+              isAdmin: true,
+              isForBoys: widget.isForBoys,
+            ),
+          ),
+        ).then((_) => _refreshAllMatches());
+      } else if (widget.sportName == 'Kabaddi') { // --- FIX: Added Kabaddi Logic ---
+         Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => LiveKabaddiScoreScreen(
+              matchId: match.id,
+              teamAName: match.teamA,
+              teamBName: match.teamB,
+              isAdmin: true,
+              isForBoys: widget.isForBoys,
+            ),
+          ),
+        ).then((_) => _refreshAllMatches());
+      } else {
+        // Default to Cricket
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => LiveCricketScoreScreen(
+              matchId: match.id,
+              sportName: widget.sportName,
+              teamAName: match.teamA,
+              teamBName: match.teamB,
+              isForBoys: widget.isForBoys,
+              onGenderToggle: widget.onGenderToggle,
+              isAdmin: true,
+            ),
+          ),
+        ).then((_) => _refreshAllMatches());
+      }
+    } else if (category == 'Upcoming') {
+      final bool? refresh = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => MatchDetailsScreen(
+            matchId: match.id,
+            isAdmin: true,
+            sportName: widget.sportName,
+            sportIcon: widget.sportIcon,
+            isForBoys: widget.isForBoys,
+            onGenderToggle: widget.onGenderToggle,
+          ),
+        ),
+      );
+      if (refresh == true) {
+        _refreshAllMatches();
+      }
+    }
+  }
+
   Widget _buildMatchCard(BuildContext context, FetchedMatch match, String category) {
-    // --- ADDED: Material + InkWell Wrapper for Clickability ---
     return Card(
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.1),
       margin: const EdgeInsets.symmetric(vertical: 8),
-      clipBehavior: Clip.antiAlias, // Ensures ripple effect respects corners
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        // InkWell wraps the content to capture taps on the entire card
         onTap: () async {
-            // Re-using the exact logic from the GestureDetector above
-            if (category == 'Live' || category == 'Recent') {
-              if (widget.sportName == 'Football') {
-                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveFootballScoreScreen(
-                      matchId: match.id,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isAdmin: true,
-                      isForBoys: widget.isForBoys,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
-              } else {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveCricketScoreScreen(
-                      matchId: match.id,
-                      sportName: widget.sportName,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isForBoys: widget.isForBoys,
-                      onGenderToggle: widget.onGenderToggle,
-                      isAdmin: true,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
-              }
-            } else if (category == 'Upcoming') {
-              final bool? refresh = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                  builder: (context) => MatchDetailsScreen(
-                    matchId: match.id,
-                    isAdmin: true,
-                    sportName: widget.sportName,
-                    sportIcon: widget.sportIcon,
-                    isForBoys: widget.isForBoys,
-                    onGenderToggle: widget.onGenderToggle,
-                  ),
-                ),
-              );
-              if (refresh == true) {
-                _refreshAllMatches();
-              }
-            }
+            _handleMatchTap(context, match, category);
         },
         child: Container(
           padding: const EdgeInsets.all(12),

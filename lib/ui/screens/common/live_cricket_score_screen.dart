@@ -11,10 +11,10 @@ import 'admin_update_score_screen.dart';
 // --- ADD THESE IMPORTS ---
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file_plus/open_file_plus.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:permission_handler/permission_handler.dart';
 // --- ADD CONDITIONAL WEB IMPORT ---
-import 'dart:html' as html; // Import dart:html for web downloads
+import 'package:universal_html/html.dart' as html;
 
 // ==========================================
 // 1. DATA MODELS
@@ -145,7 +145,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     }
 
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
       final response = await http.get(
           Uri.parse('http://$host:5000/api/get_live_score/${widget.matchId}'));
 
@@ -230,7 +230,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       const SnackBar(content: Text('Starting download...'), backgroundColor: Colors.blue),
     );
 
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     final String apiUrl = 'http://$host:5000/api/download_scorecard_pdf/${widget.matchId}';
     final String downloadFileName = 'scorecard_match_${widget.matchId}.pdf';
 
@@ -286,12 +286,12 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                 action: SnackBarAction(
                   label: 'Open',
                   onPressed: () {
-                    OpenFile.open(savePath);
+                    OpenFilex.open(savePath);
                   },
                 ),
               ),
             );
-            await OpenFile.open(savePath);
+            await OpenFilex.open(savePath);
           }
         } else {
           final error = json.decode(response.body)['message'] ?? 'Unknown error';
@@ -1128,7 +1128,7 @@ class _CricketMatchListScreenState extends State<CricketMatchListScreen>
         actions: [
           Switch(
             value: widget.isForBoys,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             onChanged: widget.onGenderToggle,
           ),
         ],
@@ -1175,7 +1175,7 @@ class _MatchListTabState extends State<_MatchListTab> {
     });
 
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
       // Calls backend to get matches based on status (live, upcoming, recent)
       final response = await http.get(Uri.parse(
           'http://$host:5000/api/get_matches/cricket?status=${widget.status}'));

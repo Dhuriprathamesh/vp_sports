@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../core/app_theme.dart';
 import '../common/live_football_score_screen.dart';
 import '../common/live_cricket_score_screen.dart';
+// ADD THIS IMPORT
+import '../common/live_kabaddi_score_screen.dart';
 
 class MatchDetailsScreen extends StatefulWidget {
   final int matchId;
@@ -60,8 +62,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       _errorMessage = '';
     });
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
-      // UPDATED: Pass sportName query parameter to avoid ID collision
+      // REPLACE THIS WITH YOUR IP
+      const String host = kIsWeb ? 'localhost' : '192.168.1.12';
+      
       final response = await http.get(
           Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}?sport=${widget.sportName}'));
 
@@ -95,8 +98,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Future<void> _startMatch() async {
     setState(() => _isLoading = true);
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
-      // UPDATED: Pass sportName query parameter so backend starts the correct match
+      // REPLACE THIS WITH YOUR IP
+      const String host = kIsWeb ? 'localhost' : '192.168.1.12';
+      
       final response = await http
           .post(Uri.parse('http://$host:5000/api/start_match/${widget.matchId}?sport=${widget.sportName}'));
 
@@ -107,6 +111,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           );
           
           Widget nextScreen;
+          
+          // --- ROUTING LOGIC UPDATED ---
           if (widget.sportName == 'Football') {
             nextScreen = LiveFootballScoreScreen(
               matchId: widget.matchId,
@@ -115,7 +121,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               isAdmin: true,
               isForBoys: widget.isForBoys,
             );
+          } else if (widget.sportName == 'Kabaddi') {
+             nextScreen = LiveKabaddiScoreScreen(
+              matchId: widget.matchId,
+              teamAName: _matchDetails!['team_a_name'],
+              teamBName: _matchDetails!['team_b_name'],
+              isAdmin: true,
+              isForBoys: widget.isForBoys,
+            );
           } else {
+            // Default to Cricket
             nextScreen = LiveCricketScoreScreen(
               matchId: widget.matchId,
               sportName: widget.sportName,
@@ -127,7 +142,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             );
           }
 
-          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => nextScreen));
+          // Use pushReplacement so the user can't go back to the "Start Match" screen
+          // Pass 'true' as result to indicate a refresh is needed if popped back further
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => nextScreen)).then((_) {
+             Navigator.of(context).pop(true); 
+          });
 
         } else {
           final responseBody = json.decode(response.body);
@@ -153,6 +172,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     switch (sportName) {
       case 'Cricket': return {'players': 11, 'subs': 4};
       case 'Football': return {'players': 11, 'subs': 5};
+      case 'Kabaddi': return {'players': 7, 'subs': 5}; // Added Kabaddi
       default: return {'players': 1, 'subs': 0}; 
     }
   }
@@ -273,6 +293,29 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Widget _buildInfoTab() {
     final startTime = DateTime.parse(_matchDetails!['start_time']);
     final isFootball = widget.sportName == 'Football';
+    final isKabaddi = widget.sportName == 'Kabaddi';
+
+    // Helper to safely join lists
+    String getOfficials() {
+        if (isFootball) return (_matchDetails!['referees'] as List? ?? []).join(', ');
+        if (isKabaddi) return (_matchDetails!['officials'] as List? ?? []).join(', ');
+        return (_matchDetails!['umpires'] as List? ?? []).join(', ');
+    }
+    
+    String getDurationLabel() {
+        if (isFootball || isKabaddi) return 'Duration';
+        return 'Overs';
+    }
+    
+    String getDurationValue() {
+        if (isFootball || isKabaddi) return "${_matchDetails!['match_duration']} mins";
+        return "${_matchDetails!['overs_per_innings']}";
+    }
+    
+    IconData getDurationIcon() {
+        if (isFootball || isKabaddi) return Icons.timer;
+        return Icons.sports_cricket_outlined;
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -290,17 +333,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 const Divider(),
                _buildInfoRow(Icons.location_on_outlined, 'Venue', _matchDetails!['venue']),
                 const Divider(),
-               _buildInfoRow(Icons.sports, isFootball ? 'Referees' : 'Umpires', 
-                  isFootball 
-                    ? (_matchDetails!['referees'] as List? ?? []).join(', ')
-                    : (_matchDetails!['umpires'] as List? ?? []).join(', ')),
+               _buildInfoRow(Icons.sports, 'Officials', getOfficials()),
                 const Divider(),
                _buildInfoRow(
-                 isFootball ? Icons.timer : Icons.sports_cricket_outlined, 
-                 isFootball ? 'Duration' : 'Overs', 
-                 isFootball 
-                    ? "${_matchDetails!['match_duration']} mins"
-                    : "${_matchDetails!['overs_per_innings']}"
+                 getDurationIcon(), 
+                 getDurationLabel(), 
+                 getDurationValue()
                ),
             ],
           ),
@@ -318,7 +356,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           const SizedBox(width: 16),
           Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
           const Spacer(),
-          Text(value, style: TextStyle(color: Colors.grey[800])),
+          Flexible(child: Text(value, style: TextStyle(color: Colors.grey[800]), textAlign: TextAlign.right)),
         ],
       ),
     );

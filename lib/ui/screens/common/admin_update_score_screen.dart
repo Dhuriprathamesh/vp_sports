@@ -9,10 +9,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // --- ADD THESE IMPORTS ---
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file_plus/open_file_plus.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:permission_handler/permission_handler.dart';
 // --- ADD CONDITIONAL WEB IMPORT ---
-import 'dart:html' as html; // Import dart:html for web downloads
+import 'package:universal_html/html.dart' as html;
 
 
 // Player class (no changes needed for JSON mapping)
@@ -133,7 +133,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   Future<void> _fetchMatchPlayers() async {
      setState(() { _isLoadingPlayers = true; _playerFetchError = ''; });
     try {
-      const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
       final response = await http.get( Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
       if (mounted) {
         if (response.statusCode == 200) {
@@ -161,7 +161,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   // Load Existing State from Backend
   Future<void> _loadExistingLiveState() async {
      setState(() => _isLoadingPlayers = true); // Show loading indicator while fetching state
-     const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+     const String host = kIsWeb ? 'localhost' : '172.16.253.246';
      
      // --- CRITICAL FIX: Changed URL from get_live_updates to get_live_score ---
      final String apiUrl = 'http://$host:5000/api/get_live_score/${widget.matchId}'; 
@@ -347,7 +347,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
         } else if (mounted && response.statusCode == 404) {
             print("No existing live update data found for match ${widget.matchId}. Starting fresh.");
              // Check actual match status to decide phase
-             const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+             const String host = kIsWeb ? 'localhost' : '172.16.253.246';
              final statusResponse = await http.get(Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
              if (mounted && statusResponse.statusCode == 200) {
                  final details = json.decode(statusResponse.body);
@@ -376,7 +376,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     setState(() => _isSaving = true);
     print("Sending update for phase: $_currentPhase");
 
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     final String apiUrl = 'http://$host:5000/api/update_live_score/${widget.matchId}';
 
     List<Map<String, dynamic>> team1BattingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
@@ -733,7 +733,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
       const SnackBar(content: Text('Starting download...'), backgroundColor: Colors.blue),
     );
 
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     final String apiUrl = 'http://$host:5000/api/download_scorecard_pdf/${widget.matchId}';
     final String downloadFileName = 'scorecard_match_${widget.matchId}.pdf';
 
@@ -789,12 +789,12 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                     action: SnackBarAction(
                       label: 'Open',
                       onPressed: () {
-                        OpenFile.open(savePath);
+                        OpenFilex.open(savePath);
                       },
                     ),
                   ),
                 );
-                await OpenFile.open(savePath);
+                await OpenFilex.open(savePath);
             } else {
                  ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Could not access downloads folder.'), backgroundColor: Colors.red),

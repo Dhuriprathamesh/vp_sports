@@ -142,7 +142,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
 
   Future<void> _fetchLiveScore() async {
     if (_isUpdating) return;
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     try {
       final response = await http.get(Uri.parse('http://$host:5000/api/get_football_live_score/${widget.matchId}'));
       if (response.statusCode == 200) {
@@ -194,7 +194,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
 
     if (manualSync) setState(() => _isUpdating = true);
     
-    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
     try {
       await http.post(
         Uri.parse('http://$host:5000/api/update_football_score/${widget.matchId}'),
@@ -252,7 +252,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
       builder: (context) {
         return AlertDialog(
           title: Text("Select Goal Scorer ($teamName)"),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
               shrinkWrap: true,
@@ -554,7 +554,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
             "${goal['player']} ${goal['time']}'",
             style: const TextStyle(fontSize: 12, color: Colors.black87),
             textAlign: TextAlign.center,
-          )).toList()
+          ))
         else
           const SizedBox(height: 10), // Spacer to keep alignment
       ],
@@ -577,7 +577,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(30),
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

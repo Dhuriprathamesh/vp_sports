@@ -51,7 +51,113 @@ def parse_json_col(val):
     try: return json.loads(val)
     except: return []
 
-# -------------------- API ENDPOINTS --------------------
+# -------------------- KABADDI ENDPOINTS (NEW) --------------------
+
+@app.route('/api/add_kabaddi_match', methods=['POST'])
+def add_kabaddi_match():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error", "message": "DB Fail"}), 500
+    cur = None
+    try:
+        cur = conn.cursor()
+        
+        # Serialize JSON fields for LONGTEXT columns
+        team_a_players = json.dumps(data.get('team_a_players', []))
+        team_b_players = json.dumps(data.get('team_b_players', []))
+        officials = json.dumps(data.get('officials', []))
+        
+        # Insert into kabaddi_match
+        cur.execute("""
+            INSERT INTO kabaddi_match 
+            (team_a_name, team_b_name, team_a_players, team_b_players, venue, start_time, match_duration, officials, match_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')
+        """, (
+            data['team_a_name'], data['team_b_name'], 
+            team_a_players, team_b_players, 
+            data['venue'], data['start_time'], int(data.get('match_duration', 40)), 
+            officials
+        ))
+        new_id = cur.lastrowid
+        
+        # Initialize kabaddi_match_livescore with default 0-0
+        cur.execute("""
+            INSERT INTO kabaddi_match_livescore 
+            (match_id, team_a_score, team_b_score, match_time, current_half) 
+            VALUES (%s, 0, 0, '00:00', '1st Half')
+        """, (new_id,))
+        
+        conn.commit()
+        return jsonify({"status": "success", "match_id": new_id}), 201
+    except Exception as e:
+        if conn: conn.rollback()
+        print("Error adding kabaddi match:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route('/api/update_kabaddi_score/<int:match_id>', methods=['POST'])
+def update_kabaddi_score(match_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    cur = None
+    try:
+        cur = conn.cursor()
+        
+        # Update livescore table (Only totals as per your schema)
+        sql = """UPDATE kabaddi_match_livescore SET 
+                 team_a_score=%s, team_b_score=%s,
+                 match_time=%s, current_half=%s
+                 WHERE match_id=%s"""
+        vals = (
+            data['team_a_score'], data['team_b_score'],
+            data['match_time'], data['current_half'],
+            match_id
+        )
+        cur.execute(sql, vals)
+        
+        # Update main match status if needed
+        if 'match_status' in data:
+             cur.execute("UPDATE kabaddi_match SET match_status=%s WHERE match_id=%s", (data['match_status'], match_id))
+             
+        conn.commit()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        print("Error updating kabaddi score:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route('/api/get_kabaddi_live_score/<int:match_id>', methods=['GET'])
+def get_kabaddi_live_score(match_id):
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    cur = None
+    try:
+        cur = conn.cursor(dictionary=True)
+        # Join tables to get names and score
+        cur.execute("""
+            SELECT ls.*, km.team_a_name, km.team_b_name, km.match_duration, km.match_status
+            FROM kabaddi_match_livescore ls 
+            JOIN kabaddi_match km ON ls.match_id = km.match_id 
+            WHERE ls.match_id = %s
+        """, (match_id,))
+        row = cur.fetchone()
+        if row: 
+            return jsonify(row), 200
+        return jsonify({"message": "Not found"}), 404
+    except Exception as e:
+        print("Error getting kabaddi score:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+# -------------------- EXISTING API ENDPOINTS (Cricket & Football) --------------------
 
 @app.route('/api/add_cricket_match', methods=['POST'])
 def add_cricket_match():
@@ -167,6 +273,25 @@ def get_matches(sport_name):
                     "scoreA": str(score_a), "scoreB": str(score_b),
                     "result": result_text
                 })
+
+        elif sport == 'kabaddi':
+            sql = f"""SELECT km.match_id, km.team_a_name, km.team_b_name, km.venue, km.start_time, km.match_status,
+                       kls.team_a_score, kls.team_b_score FROM kabaddi_match km LEFT JOIN kabaddi_match_livescore kls ON km.match_id = kls.match_id
+                WHERE km.match_status = %s ORDER BY km.start_time {sort_order}"""
+            cur.execute(sql, (db_status,))
+            rows = cur.fetchall()
+            for row in rows:
+                score_a = row[6] or 0
+                score_b = row[7] or 0
+                result_text = "Tie"
+                if score_a > score_b: result_text = f"{row[1]} won"
+                elif score_b > score_a: result_text = f"{row[2]} won"
+                
+                matches.append({
+                    "id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], 
+                    "date": row[4].strftime('%b %d') if row[4] else '', "time": row[4].strftime('%I:%M %p') if row[4] else '', 
+                    "status": row[5], "scoreA": str(score_a), "scoreB": str(score_b), "result": result_text
+                })
         
         return jsonify(matches)
     except Exception as e:
@@ -181,32 +306,42 @@ def get_match_details(match_id):
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error", "message": "Connection failed"}), 500
     cur = None
-    sport = request.args.get('sport', 'Cricket') 
-    
+    sport = request.args.get('sport', 'Cricket').lower()
     try:
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         
-        if sport == 'Football':
+        if sport == 'football':
              cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, referees, match_status FROM football_match WHERE match_id = %s", (match_id,))
              match = cur.fetchone()
              if match:
                  return jsonify({ 
-                     "id": match[0], "team_a_name": match[1], "team_b_name": match[2], 
-                     "team_a_players": parse_json_col(match[3]), "team_b_players": parse_json_col(match[4]), 
-                     "match_duration": match[5], "start_time": match[6].isoformat(), 
-                     "venue": match[7], "referees": parse_json_col(match[8]), 
-                     "match_status": match[9], "sport": "Football" 
+                     "id": match['match_id'], "team_a_name": match['team_a_name'], "team_b_name": match['team_b_name'], 
+                     "team_a_players": parse_json_col(match['team_a_players']), "team_b_players": parse_json_col(match['team_b_players']), 
+                     "match_duration": match['match_duration'], "start_time": match['start_time'].isoformat(), 
+                     "venue": match['venue'], "referees": parse_json_col(match['referees']), 
+                     "match_status": match['match_status'], "sport": "Football" 
+                 })
+        elif sport == 'kabaddi':
+             cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, officials, match_status FROM kabaddi_match WHERE match_id = %s", (match_id,))
+             match = cur.fetchone()
+             if match:
+                 return jsonify({ 
+                     "id": match['match_id'], "team_a_name": match['team_a_name'], "team_b_name": match['team_b_name'], 
+                     "team_a_players": parse_json_col(match['team_a_players']), "team_b_players": parse_json_col(match['team_b_players']), 
+                     "match_duration": match['match_duration'], "start_time": match['start_time'].isoformat(), 
+                     "venue": match['venue'], "officials": parse_json_col(match['officials']), 
+                     "match_status": match['match_status'], "sport": "Kabaddi" 
                  })
         else: 
             cur.execute("SELECT match_id, team_a_name, team_b_name, team_a_players, team_b_players, overs_per_innings, start_time, venue, umpires, match_status FROM cricket_match WHERE match_id = %s", (match_id,))
             match = cur.fetchone()
             if match:
                  return jsonify({ 
-                     "id": match[0], "team_a_name": match[1], "team_b_name": match[2], 
-                     "team_a_players": parse_json_col(match[3]), "team_b_players": parse_json_col(match[4]), 
-                     "overs_per_innings": match[5], "start_time": match[6].isoformat(), 
-                     "venue": match[7], "umpires": parse_json_col(match[8]), 
-                     "match_status": match[9], "sport": "Cricket" 
+                     "id": match['match_id'], "team_a_name": match['team_a_name'], "team_b_name": match['team_b_name'], 
+                     "team_a_players": parse_json_col(match['team_a_players']), "team_b_players": parse_json_col(match['team_b_players']), 
+                     "overs_per_innings": match['overs_per_innings'], "start_time": match['start_time'].isoformat(), 
+                     "venue": match['venue'], "umpires": parse_json_col(match['umpires']), 
+                     "match_status": match['match_status'], "sport": "Cricket" 
                  })
                  
         return jsonify({"status": "error", "message": "Match not found"}), 404
@@ -221,29 +356,44 @@ def start_match(match_id):
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error", "message": "Connection failed"}), 500
     cur = None
-    sport = request.args.get('sport', 'Cricket')
+    sport = request.args.get('sport', 'Cricket').lower()
     try:
         cur = conn.cursor()
-        table_name = 'football_match' if sport == 'Football' else 'cricket_match'
+        table_name = ''
+        ls_table = ''
+        
+        if sport == 'football':
+            table_name = 'football_match'
+            ls_table = 'football_match_livescore'
+        elif sport == 'kabaddi':
+            table_name = 'kabaddi_match'
+            ls_table = 'kabaddi_match_livescore'
+        else:
+            table_name = 'cricket_match'
+            ls_table = 'cricket_match_livescore'
         
         cur.execute(f"UPDATE {table_name} SET match_status = 'live' WHERE match_id = %s", (match_id,))
         
-        ls_table = 'football_match_livescore' if sport == 'Football' else 'cricket_match_livescore'
-        
+        # Check if livescore row exists
         cur.execute(f"SELECT match_id FROM {ls_table} WHERE match_id = %s", (match_id,))
         if not cur.fetchone():
-             if sport == 'Football':
+             # Create if missing (should exist from Add, but safety check)
+             if sport == 'football':
                  cur.execute(f"INSERT INTO {ls_table} (match_id, team_a_goals, team_b_goals, match_time, current_half, match_status) VALUES (%s, 0, 0, '00:00', '1st Half', 'live')", (match_id,))
-             else:
+             elif sport == 'kabaddi':
+                 cur.execute(f"INSERT INTO {ls_table} (match_id, team_a_score, team_b_score, match_time, current_half) VALUES (%s, 0, 0, '00:00', '1st Half')", (match_id,))
+             else: # Cricket
                  cur.execute("SELECT team_a_name, team_b_name FROM cricket_match WHERE match_id = %s", (match_id,))
                  names = cur.fetchone()
                  if names:
                     cur.execute(f"INSERT INTO {ls_table} (match_id, team1_name, team2_name, current_status) VALUES (%s, %s, %s, 'live')", (match_id, names[0], names[1]))
         else:
-             if sport == 'Football':
+             # Update status in livescore table if applicable
+             if sport == 'football':
                  cur.execute(f"UPDATE {ls_table} SET match_status = 'live' WHERE match_id = %s", (match_id,))
-             else:
+             elif sport == 'cricket':
                  cur.execute(f"UPDATE {ls_table} SET current_status = 'live' WHERE match_id = %s", (match_id,))
+             # Kabaddi livescore table doesn't have a status column in the provided schema, handled in main table
 
         conn.commit()
         return jsonify({"status": "success", "message": "Match started"}), 200
@@ -352,7 +502,7 @@ def get_live_score(match_id):
         if cur: cur.close()
         if conn: conn.close()
 
-# --- FOOTBALL SCORE ENDPOINTS (Updated) ---
+# --- FOOTBALL SCORE ENDPOINTS ---
 
 @app.route('/api/get_football_live_score/<int:match_id>', methods=['GET'])
 def get_football_live_score(match_id):
