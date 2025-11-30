@@ -22,8 +22,14 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   // Controllers
   late final TextEditingController _teamANameController;
   late final TextEditingController _teamBNameController;
+  // Athletics Specific: Team C Controller
+  late final TextEditingController _teamCNameController; 
+  
   late final List<TextEditingController> _teamAPlayerControllers;
   late final List<TextEditingController> _teamBPlayerControllers;
+  // Athletics Specific: Team C Players
+  late final List<TextEditingController> _teamCPlayerControllers;
+
   late final TextEditingController _venueController;
   late final TextEditingController _startTimeController;
   
@@ -33,7 +39,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   late final TextEditingController _matchDurationController; 
   late final TextEditingController _refereesController; 
   
-  // FIXED: Initialize immediately to prevent LateInitializationError during Hot Reload
   final TextEditingController _totalQuartersController = TextEditingController(text: '4'); 
   
   String _volleyballFormat = 'Best of 3 Sets';
@@ -42,7 +47,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   // Selection state for active players
   String? _selectedPlayerA;
   String? _selectedPlayerB;
-  // Additional players for Doubles (Table Tennis / Badminton)
   String? _selectedPlayerA2;
   String? _selectedPlayerB2;
 
@@ -55,13 +59,13 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     super.initState();
     _teamANameController = TextEditingController();
     _teamBNameController = TextEditingController();
+    _teamCNameController = TextEditingController(); // Init Team C Name
     _venueController = TextEditingController();
     _startTimeController = TextEditingController(
         text: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now().add(const Duration(days: 1))));
     
     _oversController = TextEditingController();
     _umpiresController = TextEditingController();
-    // _totalQuartersController is already initialized above
     
     String defaultDuration = "90";
     if (widget.sportName == 'Kabaddi') defaultDuration = "40";
@@ -77,12 +81,16 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         List.generate(totalPlayers, (_) => TextEditingController());
     _teamBPlayerControllers =
         List.generate(totalPlayers, (_) => TextEditingController());
+    // Init Team C Players (Only used for Athletics)
+    _teamCPlayerControllers = 
+        List.generate(totalPlayers, (_) => TextEditingController());
   }
 
   @override
   void dispose() {
     _teamANameController.dispose();
     _teamBNameController.dispose();
+    _teamCNameController.dispose();
     _venueController.dispose();
     _startTimeController.dispose();
     _oversController.dispose();
@@ -90,12 +98,9 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     _matchDurationController.dispose();
     _refereesController.dispose();
     _totalQuartersController.dispose();
-    for (var controller in _teamAPlayerControllers) {
-      controller.dispose();
-    }
-    for (var controller in _teamBPlayerControllers) {
-      controller.dispose();
-    }
+    for (var controller in _teamAPlayerControllers) controller.dispose();
+    for (var controller in _teamBPlayerControllers) controller.dispose();
+    for (var controller in _teamCPlayerControllers) controller.dispose();
     super.dispose();
   }
   
@@ -112,14 +117,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     try {
       final List<String> teamAPlayers = _teamAPlayerControllers
-          .map((c) => c.text)
-          .where((name) => name.isNotEmpty)
-          .toList();
+          .map((c) => c.text).where((name) => name.isNotEmpty).toList();
 
       final List<String> teamBPlayers = _teamBPlayerControllers
-          .map((c) => c.text)
-          .where((name) => name.isNotEmpty)
-          .toList();
+          .map((c) => c.text).where((name) => name.isNotEmpty).toList();
       
       Map<String, dynamic> matchData = {
         'team_a_name': _teamANameController.text,
@@ -130,7 +131,27 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         'venue': _venueController.text,
       };
 
-      if (widget.sportName == 'Cricket') {
+      if (widget.sportName == 'Athletics') {
+         // --- Athletics Specific Data ---
+         final List<String> teamCPlayers = _teamCPlayerControllers
+            .map((c) => c.text).where((name) => name.isNotEmpty).toList();
+         
+         matchData['team_c_name'] = _teamCNameController.text;
+         matchData['team_c_players'] = teamCPlayers;
+         
+         final List<String> officials = _refereesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+         matchData['officials'] = officials;
+         // Use Team A Name field as "Event Category" for Athletics usually, 
+         // but since we have 3 teams, we might map it differently or add a field.
+         // Assuming backend expects 'event_category' separately or we reuse a field.
+         // Let's assume user enters Event Name in Team A Name based on UI flow, 
+         // BUT wait, we need actual Team Names. 
+         // Let's add a specific field for 'Event Category' in _buildMatchInfoPage if needed,
+         // or repurpose one. For now, let's keep it standard.
+         matchData['event_category'] = "Track Event"; // Default or add field
+      } 
+      // ... [Other sports logic remains same] ...
+      else if (widget.sportName == 'Cricket') {
         final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['overs'] = _oversController.text;
         matchData['umpires'] = umpires;
@@ -150,9 +171,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       } else if (widget.sportName == 'Volleyball') {
         final List<String> officials = _refereesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['match_format'] = _volleyballFormat; 
-        matchData['officials'] = officials;
-      } else if (widget.sportName == 'Athletics') {
-        final List<String> officials = _refereesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['officials'] = officials;
       } else if (widget.sportName == 'Chess') {
          final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
@@ -244,13 +262,26 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
+  // --- UPDATED: Page Logic to handle 4 pages for Athletics ---
   Widget _getCurrentPage() {
     final isAthletics = widget.sportName == 'Athletics';
-    switch (_currentPage) {
-      case 0: return _buildTeamPage(isAthletics ? 'Event' : 'A', _teamANameController, _teamAPlayerControllers);
-      case 1: return _buildTeamPage('B', _teamBNameController, _teamBPlayerControllers);
-      case 2: return _buildMatchInfoPage();
-      default: return Container(key: const ValueKey('empty'));
+    
+    if (isAthletics) {
+       switch (_currentPage) {
+         case 0: return _buildTeamPage('A', _teamANameController, _teamAPlayerControllers);
+         case 1: return _buildTeamPage('B', _teamBNameController, _teamBPlayerControllers);
+         case 2: return _buildTeamPage('C', _teamCNameController, _teamCPlayerControllers);
+         case 3: return _buildMatchInfoPage();
+         default: return Container(key: const ValueKey('empty'));
+       }
+    } else {
+       // Standard 3 Pages for other sports
+       switch (_currentPage) {
+         case 0: return _buildTeamPage('A', _teamANameController, _teamAPlayerControllers);
+         case 1: return _buildTeamPage('B', _teamBNameController, _teamBPlayerControllers);
+         case 2: return _buildMatchInfoPage();
+         default: return Container(key: const ValueKey('empty'));
+       }
     }
   }
 
@@ -270,14 +301,18 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
+  // --- UPDATED: Progress Indicator for 4 Steps in Athletics ---
   Widget _buildProgressIndicator() {
     final isAthletics = widget.sportName == 'Athletics';
-    final titles = isAthletics ? ['Event', 'Info'] : ['Team A', 'Team B', 'Match Info'];
+    final titles = isAthletics 
+        ? ['Team A', 'Team B', 'Team C', 'Info'] 
+        : ['Team A', 'Team B', 'Match Info'];
+        
     int visualIndex = _currentPage;
-    if (isAthletics && _currentPage == 2) visualIndex = 1;
+    final int steps = titles.length;
 
     final double screenWidth = MediaQuery.of(context).size.width - 88; 
-    final double progressWidth = (visualIndex / (titles.length - 1)) * screenWidth;
+    final double progressWidth = (visualIndex / (steps - 1)) * screenWidth;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -290,7 +325,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
               Align(alignment: Alignment.centerLeft, child: AnimatedContainer(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, height: 4, width: progressWidth, margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(2)))),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(titles.length, (index) {
+                children: List.generate(steps, (index) {
                   final bool isCompleted = index < visualIndex;
                   final bool isActive = index == visualIndex;
                   return Container(
@@ -309,9 +344,9 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           ),
           const SizedBox(height: 8),
           Row(
-            children: List.generate(titles.length, (index) {
+            children: List.generate(steps, (index) {
               final bool isActive = index <= visualIndex;
-              TextAlign align = index == 0 ? TextAlign.left : (index == titles.length - 1 ? TextAlign.right : TextAlign.center);
+              TextAlign align = index == 0 ? TextAlign.left : (index == steps - 1 ? TextAlign.right : TextAlign.center);
               return Expanded(child: Text(titles[index], textAlign: align, style: TextStyle(fontSize: 12, color: isActive ? Colors.black87 : Colors.grey, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)));
             }),
           )
@@ -322,11 +357,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
 
   Widget _buildTeamPage(String teamLabel, TextEditingController teamNameController, List<TextEditingController> playerControllers) {
     final playerCounts = _getSportPlayerCounts(widget.sportName);
-    final isAthletics = widget.sportName == 'Athletics';
     
-    final nameLabel = isAthletics ? "Enter Event Name" : 'Enter Team $teamLabel Name';
-    final headerLabel = isAthletics ? "Event Name" : 'Team $teamLabel Name';
-    final listHeader = isAthletics ? "Participants (${playerCounts['players']})" : 'Team $teamLabel Players (${playerCounts['players']})';
+    final nameLabel = 'Enter Team $teamLabel Name';
+    final headerLabel = 'Team $teamLabel Name';
+    final listHeader = 'Team $teamLabel Players (${playerCounts['players']})';
 
     return SingleChildScrollView(
       key: PageStorageKey('team_$teamLabel'),
@@ -334,12 +368,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         key: ValueKey('team_anim_$teamLabel'),
         children: [
           _buildSectionHeader(headerLabel),
-          _buildTextFormField(controller: teamNameController, label: nameLabel, icon: isAthletics ? Icons.event_note : Icons.group_outlined),
+          _buildTextFormField(controller: teamNameController, label: nameLabel, icon: Icons.group_outlined),
           const SizedBox(height: 16),
           _buildSectionHeader(listHeader),
           ...List.generate(playerControllers.length, (index) {
               String pLabel;
-              if (isAthletics) {
+              if (widget.sportName == 'Athletics') {
                  pLabel = 'Runner ${index + 1}';
               } else {
                  pLabel = index < playerCounts['players']! ? 'Player ${index + 1}' : 'Substitute ${index - playerCounts['players']! + 1}';
@@ -413,7 +447,11 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
            _buildTextFormField(controller: _refereesController, label: 'Referee / Line Judges', icon: Icons.sports),
         ];
       case 'Athletics':
-        return [_buildTextFormField(controller: _refereesController, label: 'Official / Timekeeper', icon: Icons.timer_outlined)];
+        // For athletics, add specific event category field if desired, or repurpose existing fields.
+        return [
+           // Just the Official/Timekeeper field is usually enough for simple athletics
+           _buildTextFormField(controller: _refereesController, label: 'Official / Timekeeper', icon: Icons.timer_outlined)
+        ];
       case 'Chess':
       case 'Carrom':
       case 'Table Tennis': 
@@ -490,8 +528,11 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     }
   }
 
+  // --- UPDATED: Navigation Buttons to handle 4 pages logic ---
   Widget _buildNavigationButtons() {
     final isAthletics = widget.sportName == 'Athletics';
+    final int maxPages = isAthletics ? 3 : 2; // 0-based index (0,1,2,3 for athletics; 0,1,2 for others)
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -502,27 +543,19 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             onPressed: _isLoading ? null : () {
               setState(() {
                 _navigationDirection = -1.0;
-                if (isAthletics && _currentPage == 2) {
-                   _currentPage = 0;
-                } else {
-                   _currentPage--;
-                }
+                _currentPage--;
               });
             },
           ),
         const Spacer(),
         ElevatedButton.icon(
           icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.arrow_forward),
-          label: Text(_currentPage == 2 ? 'Save Match' : 'Next'),
+          label: Text(_currentPage == maxPages ? 'Save Match' : 'Next'),
           onPressed: _isLoading ? null : () {
-            if (_currentPage < 2) {
+            if (_currentPage < maxPages) {
               setState(() {
                 _navigationDirection = 1.0;
-                if (isAthletics && _currentPage == 0) {
-                   _currentPage = 2;
-                } else {
-                   _currentPage++;
-                }
+                _currentPage++;
               });
             } else {
               _saveMatch();
@@ -546,7 +579,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       case 'Football': return {'players': 11, 'subs': 5};
       case 'Kabaddi': return {'players': 7, 'subs': 5};
       case 'Volleyball': return {'players': 6, 'subs': 6};
-      case 'Athletics': return {'players': 8, 'subs': 0}; 
+      case 'Athletics': return {'players': 5, 'subs': 0}; 
       case 'Chess': return {'players': 5, 'subs': 0};
       case 'Carrom': return {'players': 5, 'subs': 0}; 
       case 'Table Tennis': return {'players': 5, 'subs': 0};

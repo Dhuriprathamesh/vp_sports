@@ -7,6 +7,7 @@ import 'add_match.dart';
 import '../user/match_details_screen.dart';
 
 // --- Live Score Screen Imports ---
+// Ensure these files exist in lib/ui/screens/common/
 import '../common/live_cricket_score_screen.dart';
 import '../common/live_football_score_screen.dart';
 import '../common/live_kabaddi_score_screen.dart';
@@ -15,8 +16,8 @@ import '../common/live_chess_score_screen.dart';
 import '../common/live_carrom_score_screen.dart';
 import '../common/live_table_tennis_score_screen.dart';
 import '../common/live_badminton_score_screen.dart';
-import '../common/live_athletics_score_screen.dart'; 
-import '../common/live_basketball_score_screen.dart'; // Added Basketball Import
+import '../common/live_athletics_score_screen.dart';
+import '../common/live_basketball_score_screen.dart';
 
 // --- Data Model for Fetched Matches ---
 class FetchedMatch {
@@ -374,7 +375,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
           isForBoys: widget.isForBoys,
           matchFormat: match.matchFormat ?? 'Best of 3 Sets',
         );
-      } else if (sport == 'Basketball') { // Added Basketball
+      } else if (sport == 'Basketball') {
         screen = LiveBasketballScoreScreen(
           matchId: match.id,
           teamAName: match.teamA,
@@ -490,7 +491,6 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
         );
     }
 
-    // Hide score numbers for specific sports
     bool hideScores = widget.sportName == 'Carrom' ||
         widget.sportName == 'Table Tennis' ||
         widget.sportName == 'Badminton' ||

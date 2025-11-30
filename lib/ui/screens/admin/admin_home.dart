@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import 'admin_sports_details.dart';
+import 'admin_sports_details.dart'; // Ensure this matches the file name above
 import 'admin_leaderboard.dart';
-import 'add_match.dart'; // Import Add Match Screen
+import 'add_match.dart';
+import '../../widgets/live_matches_carousel.dart'; 
 
-// The main screen of the application for the Admin.
 class AdminHomeScreen extends StatelessWidget {
   final bool isForBoys;
   final Function(bool) onGenderToggle;
@@ -43,7 +43,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
   bool _isProfileMenuOpen = false;
   String _selectedSportsCategory = 'Outdoor';
   late final ScrollController _scrollController;
-  double _parallaxOffset = 0.0;
   late final AnimationController _profileMenuController;
   late final Animation<Offset> _profileMenuSlideAnimation;
   late final Animation<double> _profileMenuFadeAnimation;
@@ -52,7 +51,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
 
     _profileMenuController = AnimationController(
       vsync: this,
@@ -75,15 +73,8 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
     );
   }
 
-  void _onScroll() {
-    setState(() {
-      _parallaxOffset = _scrollController.offset * 0.25;
-    });
-  }
-
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _profileMenuController.dispose();
     super.dispose();
@@ -124,7 +115,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
             ),
             child: _buildMainContent(context),
           ),
-          // FloatingActionButton removed here
           bottomNavigationBar: _buildBottomNavigationBar(context),
         ),
         if (_isProfileMenuOpen)
@@ -238,11 +228,17 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
   Widget _buildMainContent(BuildContext context) {
     return SingleChildScrollView(
       controller: _scrollController,
-      padding: const EdgeInsets.only(bottom: 20), // Reduced bottom padding since FAB is gone
+      padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLiveMatchesSection(context),
+          // --- LIVE MATCHES CAROUSEL ---
+          LiveMatchesCarousel(
+            isForBoys: widget.isForBoys,
+            isAdmin: true, // We are in Admin Home
+            onGenderToggle: widget.onGenderToggle,
+          ),
+          
           _buildCategoryToggle(context),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 400),
@@ -332,141 +328,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
     );
   }
 
-  Widget _buildLiveMatchesSection(BuildContext context) {
-    List<Map<String, dynamic>> liveMatches = [
-      {
-        'title': 'Cricket • T20 Match 1',
-        'teamA': 'TEAM A',
-        'teamB': 'TEAM B',
-        'scoreA': '172/5',
-        'scoreB': '140/8',
-        'summary': 'Team A leads by 32 runs.'
-      },
-      {
-        'title': 'Football • League Final',
-        'teamA': 'TEAM X',
-        'teamB': 'TEAM Y',
-        'scoreA': '2',
-        'scoreB': '1',
-        'summary': 'Halftime'
-      },
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Text(
-            'Live Matches',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.black.withOpacity(0.8)),
-          ),
-        ),
-        SizedBox(
-          height: 160,
-          child: Transform.translate(
-            offset: Offset(-_parallaxOffset, 0),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: 12 + _parallaxOffset),
-              itemCount: liveMatches.length,
-              itemBuilder: (context, index) {
-                final matchData = liveMatches[index];
-                return FadeInAnimation(
-                  delay: Duration(milliseconds: 100 + index * 50),
-                  child: _buildLiveMatchCard(context, matchData),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLiveMatchCard(
-      BuildContext context, Map<String, dynamic> matchData) {
-    return Card(
-      elevation: 4,
-      shadowColor: Colors.black.withOpacity(0.2),
-      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        width: 280,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(matchData['title'] ?? 'Live Match',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(20)),
-                  child: const Text('LIVE',
-                      style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10)),
-                )
-              ],
-            ),
-            const Spacer(flex: 2),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(matchData['teamA'] ?? 'Team A',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 8),
-                      Text(matchData['teamB'] ?? 'Team B',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(matchData['scoreA'] ?? '-',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Theme.of(context).colorScheme.secondary)),
-                      const SizedBox(height: 8),
-                      Text(matchData['scoreB'] ?? '-',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Theme.of(context).colorScheme.secondary)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(flex: 1),
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(matchData['summary'] ?? '-',
-                  style: TextStyle(
-                      fontSize: 12, color: Theme.of(context).primaryColor)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSportsGrid(BuildContext context,
       {required Key key,
       required String title,
@@ -497,7 +358,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
               final String? sportName = sport['name'];
               final IconData? sportIcon = sport['icon'];
 
-              // Handle empty placeholder
               if (sportName == null) return const SizedBox();
 
               Widget sportCard;
@@ -658,12 +518,11 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
         {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
       ];
 
-  // UPDATED ICONS HERE
   List<Map<String, dynamic>> _getIndoorSports() => [
         {'name': 'Chess', 'icon': Icons.gamepad_outlined},
-        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, // Changed to racket
+        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, 
         {'name': 'Carrom', 'icon': Icons.album},
-        {'name': 'Badminton', 'icon': Icons.sports_tennis}, // Changed to badminton
+        {'name': 'Badminton', 'icon': Icons.filter_vintage}, 
       ];
 }
 
