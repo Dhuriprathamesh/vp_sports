@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:simple_animations/simple_animations.dart';
+import 'package:video_player/video_player.dart'; // Ensure you ran 'flutter pub add video_player'
 
 enum AuthState { roleSelection, authentication }
-
-// Enum for animated properties in the background
-enum _AniProps { color1, color2 }
 
 class LoginScreen extends StatefulWidget {
   final Function(String) onLoginSuccess;
@@ -27,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
 
+  // --- Video Controller (Nullable for safety) ---
+  VideoPlayerController? _videoController;
+
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _errorMessage;
@@ -42,6 +43,28 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         .animate(CurvedAnimation(parent: _authFormController, curve: Curves.easeOut));
     _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
         .animate(CurvedAnimation(parent: _authFormController, curve: Curves.easeOutCubic));
+
+    // --- Initialize Video Safely ---
+    _initializeVideo();
+  }
+
+  void _initializeVideo() {
+    // Use standard asset path. Ensure 'assets/login_bg.mp4' exists and is in pubspec.yaml
+    _videoController = VideoPlayerController.asset('assets/vd.mp4')
+      ..initialize().then((_) {
+        if (mounted) {
+          _videoController?.play();
+          _videoController?.setLooping(true);
+          _videoController?.setVolume(0); // Mute is often required for web autoplay
+          setState(() {});
+        }
+      }).catchError((error) {
+        debugPrint("Video load failed (showing fallback): $error");
+        // If video fails (codec error or 404), set to null to show gradient background
+        if (mounted) {
+          setState(() => _videoController = null);
+        }
+      });
   }
 
   @override
@@ -49,6 +72,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _authFormController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -64,7 +88,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   void _goBackToRoleSelection() {
-    // Animate the form out, then change the state once the animation is complete.
     _authFormController.reverse().whenComplete(() {
       if (mounted) {
         setState(() {
@@ -95,9 +118,40 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF073A30),
       body: Stack(
         children: [
-          const AnimatedBackground(),
+          // --- Layer 1: Video Background ---
+          if (_videoController != null && _videoController!.value.isInitialized)
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _videoController!.value.size.width,
+                  height: _videoController!.value.size.height,
+                  child: Opacity(
+                    opacity: 0.4,
+                    child: VideoPlayer(_videoController!),
+                  ),
+                ),
+              ),
+            ),
+
+          // --- Layer 2: Gradient Overlay ---
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF073A30).withOpacity(0.45),
+                  const Color(0xFF0A4F43).withOpacity(0.4),
+                ],
+              ),
+            ),
+          ),
+
+          // --- Layer 3: Content ---
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 500),
             transitionBuilder: (child, animation) {
@@ -113,18 +167,20 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildRoleSelection() {
-    // Wrapped in a SizedBox to ensure the Column takes the full width, allowing proper centering.
     return SizedBox(
       width: double.infinity,
       child: Column(
         key: const ValueKey('role_selection'),
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center, // Center children horizontally
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Image.asset(
             'assets/vp_logo.png',
             height: 60,
             color: Colors.white,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(Icons.sports_soccer, size: 60, color: Colors.white);
+            },
           ),
           const SizedBox(height: 16),
           LoopAnimationBuilder<double>(
@@ -168,7 +224,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   Widget _buildAuthForm() {
     return BackdropFilter(
       key: const ValueKey('auth_form'),
-      filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+      filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -304,44 +360,3 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     );
   }
 }
-
-class AnimatedBackground extends StatelessWidget {
-  const AnimatedBackground({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final tween = MovieTween()
-      ..scene(
-              begin: Duration.zero,
-              duration: const Duration(seconds: 4),
-              curve: Curves.easeInOut)
-          .tween(_AniProps.color1,
-              ColorTween(begin: const Color(0xFF073A30), end: const Color(0xFF0A4F43)))
-      ..scene(
-              begin: Duration.zero,
-              duration: const Duration(seconds: 4),
-              curve: Curves.easeInOut)
-          .tween(_AniProps.color2,
-              ColorTween(begin: Theme.of(context).primaryColor, end: const Color(0xFF1E8272)));
-
-    return MirrorAnimationBuilder<Movie>(
-      tween: tween,
-      duration: const Duration(seconds: 4),
-      builder: (context, value, child) {
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                value.get(_AniProps.color1),
-                value.get(_AniProps.color2),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import 'admin_sports_details.dart';
 import 'admin_leaderboard.dart';
+import 'add_match.dart'; // Import Add Match Screen
 
 // The main screen of the application for the Admin.
 class AdminHomeScreen extends StatelessWidget {
@@ -23,7 +24,6 @@ class AdminHomeScreen extends StatelessWidget {
   }
 }
 
-// Using a StatefulWidget internally to manage local state and animations.
 class _AdminHomeScreenView extends StatefulWidget {
   final bool isForBoys;
   final Function(bool) onGenderToggle;
@@ -37,17 +37,13 @@ class _AdminHomeScreenView extends StatefulWidget {
   State<_AdminHomeScreenView> createState() => _AdminHomeScreenViewState();
 }
 
-class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerProviderStateMixin {
+class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
+    with TickerProviderStateMixin {
   int _bottomNavIndex = 0;
   bool _isProfileMenuOpen = false;
-
-  // State to track which sports category is currently visible.
   String _selectedSportsCategory = 'Outdoor';
-
   late final ScrollController _scrollController;
   double _parallaxOffset = 0.0;
-
-  // --- Animation Properties for the Profile Menu ---
   late final AnimationController _profileMenuController;
   late final Animation<Offset> _profileMenuSlideAnimation;
   late final Animation<double> _profileMenuFadeAnimation;
@@ -64,14 +60,14 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     );
 
     _profileMenuSlideAnimation = Tween<Offset>(
-      begin: const Offset(0.5, 0),
-      end: Offset.zero
-    ).animate(CurvedAnimation(
+            begin: const Offset(0.5, 0), end: Offset.zero)
+        .animate(CurvedAnimation(
       parent: _profileMenuController,
       curve: Curves.easeOutCubic,
     ));
 
-    _profileMenuFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _profileMenuFadeAnimation =
+        Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _profileMenuController,
         curve: Curves.easeOut,
@@ -107,8 +103,8 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
   @override
   Widget build(BuildContext context) {
     final gradientColors = widget.isForBoys
-      ? AppTheme.boysGradientColors
-      : AppTheme.girlsGradientColors;
+        ? AppTheme.boysGradientColors
+        : AppTheme.girlsGradientColors;
 
     return Stack(
       children: [
@@ -128,6 +124,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
             ),
             child: _buildMainContent(context),
           ),
+          // FloatingActionButton removed here
           bottomNavigationBar: _buildBottomNavigationBar(context),
         ),
         if (_isProfileMenuOpen)
@@ -153,6 +150,8 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           'assets/vp_logo.png',
           height: 30,
           color: Colors.white,
+          errorBuilder: (context, error, stackTrace) =>
+              const Icon(Icons.sports, color: Colors.white),
         ),
       ),
       title: const Text('Sports Mania'),
@@ -179,7 +178,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
 
   Widget _buildAnimatedProfileMenu() {
     final screenWidth = MediaQuery.of(context).size.width;
-
     return Positioned(
       right: 16,
       top: 60,
@@ -224,11 +222,6 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           SnackBar(content: Text('Selected: $title')),
         );
       },
-      borderRadius: title == 'My Account'
-        ? const BorderRadius.vertical(top: Radius.circular(12))
-        : title == 'Log Out'
-        ? const BorderRadius.vertical(bottom: Radius.circular(12))
-        : BorderRadius.zero,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
@@ -245,13 +238,12 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
   Widget _buildMainContent(BuildContext context) {
     return SingleChildScrollView(
       controller: _scrollController,
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 20), // Reduced bottom padding since FAB is gone
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildLiveMatchesSection(context),
           _buildCategoryToggle(context),
-
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 400),
             transitionBuilder: (Widget child, Animation<double> animation) {
@@ -272,7 +264,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
                     key: const ValueKey('outdoor'),
                     title: 'Outdoor Sports',
                     sports: _getOutdoorSports(),
-                    iconColor: Colors.orange.shade700,
+                    iconColor: const Color.fromARGB(255, 255, 255, 255),
                   )
                 : _buildSportsGrid(
                     context,
@@ -316,31 +308,49 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     );
   }
 
-  Widget _buildCategoryButton(BuildContext context, String label, IconData icon, bool isSelected, VoidCallback onPressed) {
+  Widget _buildCategoryButton(BuildContext context, String label, IconData icon,
+      bool isSelected, VoidCallback onPressed) {
     final primaryColor = Theme.of(context).primaryColor;
     return ElevatedButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, size: 20, color: isSelected ? Colors.white : primaryColor),
-      label: Text(label, style: TextStyle(fontSize: 16, color: isSelected ? Colors.white : primaryColor)),
+      icon:
+          Icon(icon, size: 20, color: isSelected ? Colors.white : primaryColor),
+      label: Text(label,
+          style: TextStyle(
+              fontSize: 16,
+              color: isSelected ? Colors.white : primaryColor)),
       style: ElevatedButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         elevation: isSelected ? 4 : 1,
-        backgroundColor: isSelected ? primaryColor : Colors.white.withOpacity(0.8),
-        side: isSelected ? BorderSide.none : BorderSide(color: primaryColor.withOpacity(0.5)),
+        backgroundColor:
+            isSelected ? primaryColor : Colors.white.withOpacity(0.8),
+        side: isSelected
+            ? BorderSide.none
+            : BorderSide(color: primaryColor.withOpacity(0.5)),
       ),
     );
   }
 
   Widget _buildLiveMatchesSection(BuildContext context) {
-    // Assuming you have a list of live matches data
-    // List<Map<String, dynamic>> liveMatches = fetchLiveMatches(); // Replace with your data fetching
-     List<Map<String, dynamic>> liveMatches = [ // Using dummy data for layout
-        {'title': 'Cricket • T20 Match 1', 'teamA': 'TEAM A', 'teamB': 'TEAM B', 'scoreA': '172/5', 'scoreB': '140/8', 'summary': 'Team A leads by 32 runs.'},
-        {'title': 'Cricket • T20 Match 2', 'teamA': 'TEAM C', 'teamB': 'TEAM D', 'scoreA': '155/6', 'scoreB': '156/4', 'summary': 'Team D won by 6 wickets.'},
-        {'title': 'Football • League Final', 'teamA': 'TEAM X', 'teamB': 'TEAM Y', 'scoreA': '2', 'scoreB': '1', 'summary': 'Halftime'},
-     ];
-
+    List<Map<String, dynamic>> liveMatches = [
+      {
+        'title': 'Cricket • T20 Match 1',
+        'teamA': 'TEAM A',
+        'teamB': 'TEAM B',
+        'scoreA': '172/5',
+        'scoreB': '140/8',
+        'summary': 'Team A leads by 32 runs.'
+      },
+      {
+        'title': 'Football • League Final',
+        'teamA': 'TEAM X',
+        'teamB': 'TEAM Y',
+        'scoreA': '2',
+        'scoreB': '1',
+        'summary': 'Halftime'
+      },
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,22 +359,22 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
           padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
           child: Text(
             'Live Matches',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.black.withOpacity(0.8)),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.black.withOpacity(0.8)),
           ),
         ),
         SizedBox(
-          height: 160, // Adjusted height slightly if needed
+          height: 160,
           child: Transform.translate(
             offset: Offset(-_parallaxOffset, 0),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: 12 + _parallaxOffset),
-              itemCount: liveMatches.length, // Use the length of your data
+              itemCount: liveMatches.length,
               itemBuilder: (context, index) {
-                 final matchData = liveMatches[index]; // Get data for the current card
+                final matchData = liveMatches[index];
                 return FadeInAnimation(
                   delay: Duration(milliseconds: 100 + index * 50),
-                  // Pass the actual match data to the card builder
                   child: _buildLiveMatchCard(context, matchData),
                 );
               },
@@ -375,94 +385,143 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     );
   }
 
-  // MODIFIED: Accepts matchData map
-  Widget _buildLiveMatchCard(BuildContext context, Map<String, dynamic> matchData) {
-      return Card(
-        elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.2),
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Container(
-          width: 280,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Row: Title and Live Tag
-              Row(
+  Widget _buildLiveMatchCard(
+      BuildContext context, Map<String, dynamic> matchData) {
+    return Card(
+      elevation: 4,
+      shadowColor: Colors.black.withOpacity(0.2),
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        width: 280,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(matchData['title'] ?? 'Live Match',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.red.shade100,
+                      borderRadius: BorderRadius.circular(20)),
+                  child: const Text('LIVE',
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10)),
+                )
+              ],
+            ),
+            const Spacer(flex: 2),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(matchData['title'] ?? 'Live Match', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(20)),
-                    child: const Text('LIVE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
-                  )
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(matchData['teamA'] ?? 'Team A',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      Text(matchData['teamB'] ?? 'Team B',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(matchData['scoreA'] ?? '-',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Theme.of(context).colorScheme.secondary)),
+                      const SizedBox(height: 8),
+                      Text(matchData['scoreB'] ?? '-',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Theme.of(context).colorScheme.secondary)),
+                    ],
+                  ),
                 ],
               ),
-              const Spacer(flex: 2), // Add more space before scores
-
-              // Middle Section: Teams and Scores
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0), // Padding around the scores row
-                child: Row(
-                   mainAxisAlignment: MainAxisAlignment.spaceBetween, // Push scores to the right
-                  children: [
-                    // Team Names Column
-                    Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Text(matchData['teamA'] ?? 'Team A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                         const SizedBox(height: 8),
-                         Text(matchData['teamB'] ?? 'Team B', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    // Scores Column
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(matchData['scoreA'] ?? '-', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-                         const SizedBox(height: 8),
-                        Text(matchData['scoreB'] ?? '-', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-               const Spacer(flex: 1), // Space before summary
-
-              // Bottom Section: Summary
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0), // Add padding above summary
-                child: Text(matchData['summary'] ?? '-', style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
-              ),
-            ],
-          ),
+            ),
+            const Spacer(flex: 1),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(matchData['summary'] ?? '-',
+                  style: TextStyle(
+                      fontSize: 12, color: Theme.of(context).primaryColor)),
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
-  Widget _buildSportsGrid(BuildContext context, { required Key key, required String title, required List<Map<String, dynamic>> sports, required Color iconColor }) {
+  Widget _buildSportsGrid(BuildContext context,
+      {required Key key,
+      required String title,
+      required List<Map<String, dynamic>> sports,
+      required Color iconColor}) {
     return Padding(
       key: key,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.black.withOpacity(0.8))),
+          Text(title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: Colors.black.withOpacity(0.8))),
           const SizedBox(height: 12),
           GridView.builder(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.05,
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.4,
             ),
             itemCount: sports.length,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, index) {
               final sport = sports[index];
+              final String? sportName = sport['name'];
+              final IconData? sportIcon = sport['icon'];
+
+              // Handle empty placeholder
+              if (sportName == null) return const SizedBox();
+
+              Widget sportCard;
+
+              if (sportName == 'Cricket') {
+                sportCard = _buildCricketCard(
+                    context, sportName, sportIcon!, iconColor);
+              } else if (sportName == 'Football') {
+                sportCard = _buildFootballCard(
+                    context, sportName, sportIcon!, iconColor);
+              } else if (sportName == 'Volleyball') {
+                sportCard = _buildVolleyballCard(
+                    context, sportName, sportIcon!, iconColor);
+              } else if (sportName == 'Kabaddi') {
+                sportCard = _buildKabaddiCard(
+                    context, sportName, sportIcon!, iconColor);
+              } else {
+                sportCard = _buildDefaultSportCard(
+                    context, name: sportName, icon: sportIcon, iconColor: iconColor);
+              }
+
               return FadeInAnimation(
                 delay: Duration(milliseconds: 150 + index * 60),
-                child: _buildSportCard(context, name: sport['name'], icon: sport['icon'], iconColor: iconColor),
+                child: sportCard,
               );
             },
           ),
@@ -471,58 +530,96 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
     );
   }
 
-  Widget _buildSportCard(BuildContext context, {String? name, IconData? icon, required Color iconColor}) {
+  // --- Specific Card Builders ---
+
+  Widget _buildCricketCard(
+      BuildContext context, String name, IconData icon, Color iconColor) {
+    return _SportCard(
+      name: name,
+      icon: icon,
+      iconColor: iconColor,
+      backgroundImage: 'assets/cricket.png',
+      onTap: () => _navigateToDetails(context, name, icon),
+    );
+  }
+
+  Widget _buildFootballCard(
+      BuildContext context, String name, IconData icon, Color iconColor) {
+    return _SportCard(
+      name: name,
+      icon: icon,
+      iconColor: iconColor,
+      backgroundImage: 'assets/football.png',
+      onTap: () => _navigateToDetails(context, name, icon),
+    );
+  }
+
+  Widget _buildVolleyballCard(
+      BuildContext context, String name, IconData icon, Color iconColor) {
+    return _SportCard(
+      name: name,
+      icon: icon,
+      iconColor: iconColor,
+      backgroundImage: 'assets/volleyball.png',
+      onTap: () => _navigateToDetails(context, name, icon),
+    );
+  }
+
+  Widget _buildKabaddiCard(
+      BuildContext context, String name, IconData icon, Color iconColor) {
+    return _SportCard(
+      name: name,
+      icon: icon,
+      iconColor: iconColor,
+      backgroundImage: 'assets/kabaddi.jpeg',
+      onTap: () => _navigateToDetails(context, name, icon),
+    );
+  }
+
+  Widget _buildDefaultSportCard(BuildContext context,
+      {String? name, IconData? icon, required Color iconColor}) {
     if (name == null || icon == null) {
       return const SizedBox.shrink();
     }
-
-    return Material(
-      elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.15),
-      borderRadius: BorderRadius.circular(16),
-      color: Colors.white,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (context) => AdminSportsDetailsScreen(
-              sportName: name,
-              sportIcon: icon,
-              isForBoys: widget.isForBoys,
-              onGenderToggle: widget.onGenderToggle,
-            ),
-          ));
-        },
-        borderRadius: BorderRadius.circular(16),
-        splashColor: iconColor.withOpacity(0.2),
-        highlightColor: iconColor.withOpacity(0.1),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 40, color: iconColor),
-            const SizedBox(height: 10),
-            Text(name, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[800])),
-          ],
-        ),
-      ),
+    return _SportCard(
+      name: name,
+      icon: icon,
+      iconColor: iconColor,
+      onTap: () => _navigateToDetails(context, name, icon),
     );
+  }
+
+  void _navigateToDetails(BuildContext context, String name, IconData icon) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (context) => AdminSportsDetailsScreen(
+        sportName: name,
+        sportIcon: icon,
+        isForBoys: widget.isForBoys,
+        onGenderToggle: widget.onGenderToggle,
+      ),
+    ));
   }
 
   Widget _buildBottomNavigationBar(BuildContext context) {
     return BottomNavigationBar(
       currentIndex: _bottomNavIndex,
       onTap: (index) {
-        if (index == 2) { // Leaderboard is at index 2
+        if (index == 2) {
+          // Leaderboard is at index 2
           Navigator.of(context).push(
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => AdminLeaderboardScreen(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  AdminLeaderboardScreen(
                 isForBoys: widget.isForBoys,
                 onGenderToggle: widget.onGenderToggle,
               ),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
                 const begin = Offset(0.0, 1.0);
                 const end = Offset.zero;
                 const curve = Curves.ease;
-                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                final tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: curve));
                 return SlideTransition(
                   position: animation.drive(tween),
                   child: child,
@@ -533,22 +630,19 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
         } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
         } else {
-          setState(() { _bottomNavIndex = index; });
+          setState(() {
+            _bottomNavIndex = index;
+          });
         }
       },
       items: [
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        const BottomNavigationBarItem(icon: Icon(Icons.schedule), label: 'Schedule'),
-        const BottomNavigationBarItem(icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.schedule), label: 'Schedule'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
         BottomNavigationBarItem(
-          icon: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
-            child: Icon(
-              widget.isForBoys ? Icons.male : Icons.female,
-              key: ValueKey<bool>(widget.isForBoys),
-            ),
-          ),
+          icon: Icon(widget.isForBoys ? Icons.male : Icons.female),
           label: widget.isForBoys ? 'Boys' : 'Girls',
         ),
       ],
@@ -556,28 +650,36 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView> with TickerP
   }
 
   List<Map<String, dynamic>> _getOutdoorSports() => [
-    {'name': 'Cricket', 'icon': Icons.sports_cricket}, {'name': 'Football', 'icon': Icons.sports_soccer},
-    {'name': 'Volleyball', 'icon': Icons.sports_volleyball}, {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
-    {'name': 'Athletics', 'icon': Icons.directions_run}, {'name': null, 'icon': null},
-  ];
+        {'name': 'Cricket', 'icon': Icons.sports_cricket},
+        {'name': 'Football', 'icon': Icons.sports_soccer},
+        {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+        {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+        {'name': 'Athletics', 'icon': Icons.directions_run},
+        {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
+      ];
 
+  // UPDATED ICONS HERE
   List<Map<String, dynamic>> _getIndoorSports() => [
-    {'name': 'Chess', 'icon': Icons.gamepad_outlined}, {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
-    {'name': 'Carrom', 'icon': Icons.album}, {'name': 'Badminton', 'icon': Icons.sports},
-  ];
+        {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, // Changed to racket
+        {'name': 'Carrom', 'icon': Icons.album},
+        {'name': 'Badminton', 'icon': Icons.sports_tennis}, // Changed to badminton
+      ];
 }
 
 class FadeInAnimation extends StatefulWidget {
   final Widget child;
   final Duration delay;
 
-  const FadeInAnimation({required this.child, this.delay = Duration.zero, super.key});
+  const FadeInAnimation(
+      {required this.child, this.delay = Duration.zero, super.key});
 
   @override
   State<FadeInAnimation> createState() => _FadeInAnimationState();
 }
 
-class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderStateMixin {
+class _FadeInAnimationState extends State<FadeInAnimation>
+    with TickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _opacityAnimation;
   late final Animation<Offset> _slideAnimation;
@@ -593,7 +695,8 @@ class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderSt
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
@@ -617,6 +720,77 @@ class _FadeInAnimationState extends State<FadeInAnimation> with TickerProviderSt
       child: SlideTransition(
         position: _slideAnimation,
         child: widget.child,
+      ),
+    );
+  }
+}
+
+// --- Shared Sport Card Component ---
+class _SportCard extends StatelessWidget {
+  final String name;
+  final IconData icon;
+  final Color iconColor;
+  final VoidCallback onTap;
+  final String? backgroundImage;
+
+  const _SportCard({
+    required this.name,
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+    this.backgroundImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(16),
+      color: Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: iconColor.withOpacity(0.2),
+        highlightColor: iconColor.withOpacity(0.1),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Background Image logic
+            if (backgroundImage != null)
+              Opacity(
+                opacity: 0.6, // Reduced opacity for background effect
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    backgroundImage!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback safely if image is missing
+                      return const SizedBox();
+                    },
+                  ),
+                ),
+              ),
+
+            // Foreground Content
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 40, color: iconColor),
+                const SizedBox(height: 10),
+                Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

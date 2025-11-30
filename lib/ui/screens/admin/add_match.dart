@@ -33,7 +33,22 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   late final TextEditingController _matchDurationController; 
   late final TextEditingController _refereesController; 
   
+  // FIXED: Initialize immediately to prevent LateInitializationError during Hot Reload
+  final TextEditingController _totalQuartersController = TextEditingController(text: '4'); 
+  
   String _volleyballFormat = 'Best of 3 Sets';
+  String _basketballCategory = 'full_game';
+  
+  // Selection state for active players
+  String? _selectedPlayerA;
+  String? _selectedPlayerB;
+  // Additional players for Doubles (Table Tennis / Badminton)
+  String? _selectedPlayerA2;
+  String? _selectedPlayerB2;
+
+  // Table Tennis & Badminton state
+  String _category = 'singles'; 
+  int _totalSets = 3;
 
   @override
   void initState() {
@@ -41,12 +56,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     _teamANameController = TextEditingController();
     _teamBNameController = TextEditingController();
     _venueController = TextEditingController();
-    // Default time: Tomorrow
     _startTimeController = TextEditingController(
         text: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now().add(const Duration(days: 1))));
     
     _oversController = TextEditingController();
     _umpiresController = TextEditingController();
+    // _totalQuartersController is already initialized above
     
     String defaultDuration = "90";
     if (widget.sportName == 'Kabaddi') defaultDuration = "40";
@@ -54,8 +69,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     _refereesController = TextEditingController();
 
+    // Determine total controllers needed (Players + Subs)
     final playerCounts = _getSportPlayerCounts(widget.sportName);
     final totalPlayers = playerCounts['players']! + playerCounts['subs']!;
+    
     _teamAPlayerControllers =
         List.generate(totalPlayers, (_) => TextEditingController());
     _teamBPlayerControllers =
@@ -72,6 +89,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     _umpiresController.dispose();
     _matchDurationController.dispose();
     _refereesController.dispose();
+    _totalQuartersController.dispose();
     for (var controller in _teamAPlayerControllers) {
       controller.dispose();
     }
@@ -88,8 +106,8 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     setState(() => _isLoading = true);
 
-    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-    final sportNameUrl = widget.sportName.toLowerCase();
+    const String host = kIsWeb ? 'localhost' : '10.0.2.2';
+    final sportNameUrl = widget.sportName.toLowerCase().replaceAll(' ', '_'); 
     final String apiUrl = 'http://$host:5000/api/add_${sportNameUrl}_match';
     
     try {
@@ -116,6 +134,11 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['overs'] = _oversController.text;
         matchData['umpires'] = umpires;
+      } else if (widget.sportName == 'Basketball') {
+        final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        matchData['umpires'] = umpires;
+        matchData['category'] = _basketballCategory;
+        matchData['total_quarters'] = int.tryParse(_totalQuartersController.text) ?? 4;
       } else if (widget.sportName == 'Football') {
         final List<String> referees = _refereesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['match_duration'] = _matchDurationController.text;
@@ -131,6 +154,27 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       } else if (widget.sportName == 'Athletics') {
         final List<String> officials = _refereesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         matchData['officials'] = officials;
+      } else if (widget.sportName == 'Chess') {
+         final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+         matchData['umpires'] = umpires;
+         matchData['player_a_selected'] = _selectedPlayerA;
+         matchData['player_b_selected'] = _selectedPlayerB;
+      } else if (widget.sportName == 'Carrom') {
+         final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+         matchData['umpires'] = umpires;
+      } else if (widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') {
+         final List<String> umpires = _umpiresController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+         matchData['umpires'] = umpires;
+         matchData['total_sets'] = _totalSets;
+         matchData['category'] = _category;
+         
+         if (_category == 'doubles') {
+            matchData['player_a_selected'] = "$_selectedPlayerA & $_selectedPlayerA2";
+            matchData['player_b_selected'] = "$_selectedPlayerB & $_selectedPlayerB2";
+         } else {
+            matchData['player_a_selected'] = _selectedPlayerA;
+            matchData['player_b_selected'] = _selectedPlayerB;
+         }
       }
 
       final response = await http.post(
@@ -202,19 +246,11 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
 
   Widget _getCurrentPage() {
     final isAthletics = widget.sportName == 'Athletics';
-    
     switch (_currentPage) {
-      case 0:
-        // Page 1: "Event Name" + "Participants"
-        return _buildTeamPage(isAthletics ? 'Event' : 'A', _teamANameController, _teamAPlayerControllers);
-      case 1:
-        // Page 2: Team B (Skipped for Athletics)
-        return _buildTeamPage('B', _teamBNameController, _teamBPlayerControllers);
-      case 2:
-        // Page 3 (Athletics Page 2): Match Info
-        return _buildMatchInfoPage();
-      default:
-        return Container(key: const ValueKey('empty'));
+      case 0: return _buildTeamPage(isAthletics ? 'Event' : 'A', _teamANameController, _teamAPlayerControllers);
+      case 1: return _buildTeamPage('B', _teamBNameController, _teamBPlayerControllers);
+      case 2: return _buildMatchInfoPage();
+      default: return Container(key: const ValueKey('empty'));
     }
   }
 
@@ -236,12 +272,9 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
 
   Widget _buildProgressIndicator() {
     final isAthletics = widget.sportName == 'Athletics';
-    // Shows 2 steps for Athletics, 3 for others
     final titles = isAthletics ? ['Event', 'Info'] : ['Team A', 'Team B', 'Match Info'];
-    
-    // Map actual page index to visual step index
     int visualIndex = _currentPage;
-    if (isAthletics && _currentPage == 2) visualIndex = 1; // Match Info is visually step 2
+    if (isAthletics && _currentPage == 2) visualIndex = 1;
 
     final double screenWidth = MediaQuery.of(context).size.width - 88; 
     final double progressWidth = (visualIndex / (titles.length - 1)) * screenWidth;
@@ -253,11 +286,8 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           Stack(
             alignment: Alignment.center,
             children: [
-              // Background Line
               Container(height: 4, margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-              // Active Progress Line
-              Align(alignment: Alignment.centerLeft, child: AnimatedContainer(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, height: 4, width: progressWidth, margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(2)))), // Green Color
-              // Step Circles
+              Align(alignment: Alignment.centerLeft, child: AnimatedContainer(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, height: 4, width: progressWidth, margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(2)))),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(titles.length, (index) {
@@ -341,7 +371,29 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   }
 
   List<Widget> _getSportSpecificMatchInfoFields() {
+    List<String> getTeamPlayerNames(List<TextEditingController> controllers) {
+        return controllers.map((c) => c.text).where((t) => t.isNotEmpty).toList();
+    }
+    
+    List<DropdownMenuItem<String>> getPlayerDropdownItems(List<String> names) {
+        if (names.isEmpty) {
+            return [const DropdownMenuItem(value: null, child: Text("No players entered"))];
+        }
+        return names.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList();
+    }
+
     switch (widget.sportName) {
+      case 'Basketball':
+        return [
+           Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: DropdownButtonFormField<String>(
+               value: _basketballCategory, 
+               decoration: InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+               items: const [DropdownMenuItem(value: 'full_game', child: Text('Full Game')), DropdownMenuItem(value: 'half_game', child: Text('Half Game'))],
+               onChanged: (val) => setState(() => _basketballCategory = val!),
+             )),
+           _buildTextFormField(controller: _totalQuartersController, label: 'Total Quarters', icon: Icons.timer, keyboardType: TextInputType.number),
+           _buildTextFormField(controller: _umpiresController, label: 'Umpire(s) (comma-separated)', icon: Icons.sports),
+        ];
       case 'Cricket':
         return [_buildTextFormField(controller: _oversController, label: 'Overs per Innings', icon: Icons.sports_cricket_outlined, keyboardType: TextInputType.number),
           _buildTextFormField(controller: _umpiresController, label: 'Umpire(s) (comma-separated)', icon: Icons.sports)];
@@ -354,15 +406,84 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       case 'Volleyball':
         return [
            Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: DropdownButtonFormField<String>(
-               initialValue: _volleyballFormat, decoration: InputDecoration(labelText: 'Match Format', prefixIcon: Icon(Icons.sports_volleyball, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+               value: _volleyballFormat, decoration: InputDecoration(labelText: 'Match Format', prefixIcon: Icon(Icons.sports_volleyball, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
                items: const [DropdownMenuItem(value: 'Best of 3 Sets', child: Text('Best of 3 Sets')), DropdownMenuItem(value: 'Best of 5 Sets', child: Text('Best of 5 Sets'))],
                onChanged: (val) => setState(() => _volleyballFormat = val!),
              )),
            _buildTextFormField(controller: _refereesController, label: 'Referee / Line Judges', icon: Icons.sports),
         ];
       case 'Athletics':
+        return [_buildTextFormField(controller: _refereesController, label: 'Official / Timekeeper', icon: Icons.timer_outlined)];
+      case 'Chess':
+      case 'Carrom':
+      case 'Table Tennis': 
+      case 'Badminton':
+        List<String> teamANames = getTeamPlayerNames(_teamAPlayerControllers);
+        List<String> teamBNames = getTeamPlayerNames(_teamBPlayerControllers);
+        
         return [
-          _buildTextFormField(controller: _refereesController, label: 'Official / Timekeeper', icon: Icons.timer_outlined),
+           if (widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') ...[
+             Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: DropdownButtonFormField<String>(
+                 value: _category, decoration: InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                 items: const [DropdownMenuItem(value: 'singles', child: Text('Singles')), DropdownMenuItem(value: 'doubles', child: Text('Doubles'))],
+                 onChanged: (val) => setState(() => _category = val!),
+               )),
+             Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: DropdownButtonFormField<int>(
+                 value: _totalSets, decoration: InputDecoration(labelText: 'Total Sets', prefixIcon: Icon(Icons.format_list_numbered, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                 items: const [DropdownMenuItem(value: 3, child: Text('Best of 3')), DropdownMenuItem(value: 5, child: Text('Best of 5'))],
+                 onChanged: (val) => setState(() => _totalSets = val!),
+               )),
+           ],
+
+           if(widget.sportName != 'Carrom') ...[
+             Padding(
+               padding: const EdgeInsets.symmetric(vertical: 8.0),
+               child: DropdownButtonFormField<String>(
+                 value: _selectedPlayerA,
+                 decoration: InputDecoration(labelText: 'Select Player 1 (Team A)', prefixIcon: Icon(Icons.person_pin, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                 items: getPlayerDropdownItems(teamANames),
+                 onChanged: (val) => setState(() => _selectedPlayerA = val),
+                 validator: (val) => val == null ? 'Please select Player 1 for Team A' : null,
+               ),
+             ),
+             
+             if ((widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') && _category == 'doubles')
+               Padding(
+                 padding: const EdgeInsets.symmetric(vertical: 8.0),
+                 child: DropdownButtonFormField<String>(
+                   value: _selectedPlayerA2,
+                   decoration: InputDecoration(labelText: 'Select Player 2 (Team A)', prefixIcon: Icon(Icons.person_add_alt_1, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                   items: getPlayerDropdownItems(teamANames),
+                   onChanged: (val) => setState(() => _selectedPlayerA2 = val),
+                   validator: (val) => val == null ? 'Please select Player 2 for Team A' : null,
+                 ),
+               ),
+
+             Padding(
+               padding: const EdgeInsets.symmetric(vertical: 8.0),
+               child: DropdownButtonFormField<String>(
+                 value: _selectedPlayerB,
+                 decoration: InputDecoration(labelText: 'Select Player 1 (Team B)', prefixIcon: Icon(Icons.person_pin, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                 items: getPlayerDropdownItems(teamBNames),
+                 onChanged: (val) => setState(() => _selectedPlayerB = val),
+                 validator: (val) => val == null ? 'Please select Player 1 for Team B' : null,
+               ),
+             ),
+
+             if ((widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') && _category == 'doubles')
+               Padding(
+                 padding: const EdgeInsets.symmetric(vertical: 8.0),
+                 child: DropdownButtonFormField<String>(
+                   value: _selectedPlayerB2,
+                   decoration: InputDecoration(labelText: 'Select Player 2 (Team B)', prefixIcon: Icon(Icons.person_add_alt_1, color: Colors.grey[600], size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                   items: getPlayerDropdownItems(teamBNames),
+                   onChanged: (val) => setState(() => _selectedPlayerB2 = val),
+                   validator: (val) => val == null ? 'Please select Player 2 for Team B' : null,
+                 ),
+               ),
+           ],
+
+           _buildTextFormField(controller: _umpiresController, label: 'Umpire(s)', icon: Icons.person),
         ];
       default:
         return [];
@@ -371,7 +492,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
 
   Widget _buildNavigationButtons() {
     final isAthletics = widget.sportName == 'Athletics';
-    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -382,7 +502,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             onPressed: _isLoading ? null : () {
               setState(() {
                 _navigationDirection = -1.0;
-                // Logic: If Athletics, skip page 1 (Team B) when going back
                 if (isAthletics && _currentPage == 2) {
                    _currentPage = 0;
                 } else {
@@ -393,15 +512,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           ),
         const Spacer(),
         ElevatedButton.icon(
-          icon: _isLoading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.arrow_forward), // Changed Icon to just arrow
+          icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.arrow_forward),
           label: Text(_currentPage == 2 ? 'Save Match' : 'Next'),
           onPressed: _isLoading ? null : () {
             if (_currentPage < 2) {
               setState(() {
                 _navigationDirection = 1.0;
-                // Logic: If Athletics, skip page 1 (Team B) when going forward
                 if (isAthletics && _currentPage == 0) {
                    _currentPage = 2;
                 } else {
@@ -412,12 +528,11 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
               _saveMatch();
             }
           },
-          // Updated Button Style to match the image (Green, Rounded)
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1B5E20), // Dark Green
+            backgroundColor: const Color(0xFF1B5E20),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12), // Wider button
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), // Less rounded corners
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],
@@ -426,35 +541,37 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
 
   Map<String, int> _getSportPlayerCounts(String sportName) {
     switch (sportName) {
+      case 'Basketball': return {'players': 10, 'subs': 5};
       case 'Cricket': return {'players': 11, 'subs': 4};
       case 'Football': return {'players': 11, 'subs': 5};
       case 'Kabaddi': return {'players': 7, 'subs': 5};
       case 'Volleyball': return {'players': 6, 'subs': 6};
-      case 'Athletics': return {'players': 8, 'subs': 0}; // 8 lanes usually
+      case 'Athletics': return {'players': 8, 'subs': 0}; 
+      case 'Chess': return {'players': 5, 'subs': 0};
+      case 'Carrom': return {'players': 5, 'subs': 0}; 
+      case 'Table Tennis': return {'players': 5, 'subs': 0};
+      case 'Badminton': return {'players': 5, 'subs': 0};
       default: return {'players': 1, 'subs': 0};
     }
   }
 
   Widget _buildSectionHeader(String title) {
-    return Padding(padding: const EdgeInsets.only(top: 20.0, bottom: 8.0), child: Text(title, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 16)));
+    return Padding(padding: const EdgeInsets.only(top: 20.0, bottom: 8.0), child: Text(title, style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 16)));
   }
 
-  // Updated Input Field Style to match Image (White Box, Grey Border)
   Widget _buildTextFormField({required String label, IconData? icon, TextEditingController? controller, TextInputType? keyboardType, bool isRequired = true, String? helperText}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
         controller: controller, keyboardType: keyboardType,
         decoration: InputDecoration(
-          labelText: label, 
-          helperText: helperText, 
+          labelText: label, helperText: helperText, 
           prefixIcon: icon != null ? Icon(icon, color: Colors.grey[600], size: 20) : null, 
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), 
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)), 
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF1B5E20), width: 2)),
-          filled: true, 
-          fillColor: Colors.white // White Background
+          filled: true, fillColor: Colors.white
         ),
         validator: (value) => isRequired && (value?.isEmpty ?? true) ? 'Required' : null,
       ),
@@ -470,8 +587,7 @@ class _AnimatedColumn extends StatefulWidget {
   State<_AnimatedColumn> createState() => _AnimatedColumnState();
 }
 
-class _AnimatedColumnState extends State<_AnimatedColumn>
-    with SingleTickerProviderStateMixin {
+class _AnimatedColumnState extends State<_AnimatedColumn> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override

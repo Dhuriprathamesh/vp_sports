@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/app_theme.dart';
-// Import the shared FetchedMatch model
+import '../../../core/api_constants.dart';
 import '../admin/admin_sports_details.dart' show FetchedMatch;
 import 'match_details_screen.dart';
+
+// --- Live Score Screens ---
 import '../common/live_cricket_score_screen.dart';
 import '../common/live_football_score_screen.dart';
-// --- ADD THIS IMPORT ---
 import '../common/live_kabaddi_score_screen.dart';
+import '../common/live_volleyball_score_screen.dart';
+import '../common/live_chess_score_screen.dart';
+import '../common/live_carrom_score_screen.dart';
+import '../common/live_table_tennis_score_screen.dart';
+import '../common/live_badminton_score_screen.dart';
+import '../common/live_athletics_score_screen.dart'; 
+import '../common/live_basketball_score_screen.dart'; // Added Basketball Import
 
 class SportsDetailsScreen extends StatefulWidget {
   final String sportName;
@@ -45,15 +52,8 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-     _tabController.addListener(_handleTabSelection);
     _loadAllMatches();
   }
-
- void _handleTabSelection() {
-    if (_tabController.indexIsChanging) {
-    }
-  }
-
 
   Future<void> _fetchMatches(String status) async {
     setState(() {
@@ -64,11 +64,9 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     });
 
     try {
-      // REPLACE WITH YOUR IP
-      const String host = kIsWeb ? 'localhost' : '192.168.1.12';
-      final sportNameUrl = widget.sportName.toLowerCase();
-      final String apiUrl =
-          'http://$host:5000/api/get_matches/$sportNameUrl?status=$status';
+      final String baseUrl = ApiConstants.baseUrl;
+      final sportNameUrl = widget.sportName.toLowerCase().replaceAll(' ', '_');
+      final String apiUrl = '$baseUrl/api/get_matches/$sportNameUrl?status=$status';
 
       final response = await http.get(Uri.parse(apiUrl));
 
@@ -121,22 +119,21 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
     });
   }
 
-   void _setInitialTab() {
-     if (!mounted) return;
-     if (_liveMatches.isNotEmpty) {
-       _tabController.animateTo(0);
-     } else if (_upcomingMatches.isNotEmpty) {
-       _tabController.animateTo(2);
-     } else if (_recentMatches.isNotEmpty) {
-       _tabController.animateTo(1);
-     } else {
-       _tabController.animateTo(2); 
-     }
-   }
+  void _setInitialTab() {
+    if (!mounted) return;
+    if (_liveMatches.isNotEmpty) {
+      _tabController.animateTo(0);
+    } else if (_upcomingMatches.isNotEmpty) {
+      _tabController.animateTo(2);
+    } else if (_recentMatches.isNotEmpty) {
+      _tabController.animateTo(1);
+    } else {
+      _tabController.animateTo(2);
+    }
+  }
 
   @override
   void dispose() {
-     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     super.dispose();
   }
@@ -224,61 +221,44 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
   }
 
   Widget _buildEmptyList(String category) {
-     return LayoutBuilder(
-       builder: (context, constraints) => SingleChildScrollView(
-         physics: const AlwaysScrollableScrollPhysics(),
-         child: ConstrainedBox(
-           constraints: BoxConstraints(minHeight: constraints.maxHeight),
-           child: Center(
-             child: Column(
-               mainAxisAlignment: MainAxisAlignment.center,
-               children: [
-                 Icon(Icons.hourglass_empty, size: 50, color: Colors.white.withOpacity(0.7)),
-                 const SizedBox(height: 16),
-                 Text(
-                   'No ${category.toLowerCase()} matches to show.',
-                   style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
-                 ),
-                 if (_errorMessage.isNotEmpty)
-                   Padding(
-                     padding: const EdgeInsets.only(top: 16.0, left: 24, right: 24),
-                     child: Text(
-                       _errorMessage,
-                       textAlign: TextAlign.center,
-                       style: TextStyle(color: Colors.orange.shade100, fontSize: 14),
-                     ),
-                   ),
-               ],
-             ),
-           ),
-         ),
-       ),
-     );
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.hourglass_empty, size: 50, color: Colors.white.withOpacity(0.7)),
+                const SizedBox(height: 16),
+                Text(
+                  'No ${category.toLowerCase()} matches to show.',
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
+                ),
+                if (_errorMessage.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16.0, left: 24, right: 24),
+                    child: Text(
+                      _errorMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.orange.shade100, fontSize: 14),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
- Widget _buildMatchList(BuildContext context, String category, List<FetchedMatch> matches, bool isLoading) {
+  Widget _buildMatchList(BuildContext context, String category, List<FetchedMatch> matches, bool isLoading) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
     if (_errorMessage.isNotEmpty && matches.isEmpty) {
-       return LayoutBuilder(
-         builder: (context, constraints) => SingleChildScrollView(
-           physics: const AlwaysScrollableScrollPhysics(),
-           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-             child: Center(
-               child: Padding(
-                 padding: const EdgeInsets.all(24.0),
-                 child: Text(
-                   _errorMessage,
-                   textAlign: TextAlign.center,
-                   style: TextStyle(color: Colors.orange.shade100, fontSize: 16),
-                 ),
-               ),
-             ),
-           ),
-         ),
-       );
+      return Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.white)));
     }
     if (matches.isEmpty) {
       return _buildEmptyList(category);
@@ -292,49 +272,98 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
         final match = matches[index];
         return GestureDetector(
           onTap: () {
-            if (category == 'Live' || category == 'Recent') { // Allow Recent to open scorecard
-              // --- FIXED ROUTING LOGIC ---
-              if (widget.sportName == 'Football') {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveFootballScoreScreen(
-                      matchId: match.id,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isAdmin: false, // User view
-                      isForBoys: widget.isForBoys,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
-              } else if (widget.sportName == 'Kabaddi') { // --- FIX: Added Kabaddi Logic ---
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveKabaddiScoreScreen(
-                      matchId: match.id,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isAdmin: false, // User view
-                      isForBoys: widget.isForBoys,
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
+            if (category == 'Live' || category == 'Recent') {
+              Widget screen;
+              // Handle Navigation based on sport
+              if (widget.sportName == 'Athletics') {
+                 // --- UPDATED ROUTING FOR ATHLETICS ---
+                 screen = LiveAthleticsScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  teamCName: match.teamC ?? 'Team C',
+                  eventCategory: match.eventCategory ?? 'Race',
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Football') {
+                screen = LiveFootballScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Kabaddi') {
+                screen = LiveKabaddiScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Volleyball') {
+                screen = LiveVolleyballScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                  matchFormat: match.matchFormat ?? 'Best of 3 Sets',
+                );
+              } else if (widget.sportName == 'Basketball') { // Added Basketball
+                screen = LiveBasketballScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Chess') {
+                screen = LiveChessScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Carrom') {
+                screen = LiveCarromScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Table Tennis') {
+                screen = LiveTableTennisScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
+              } else if (widget.sportName == 'Badminton') {
+                screen = LiveBadmintonScoreScreen(
+                  matchId: match.id,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isAdmin: false,
+                  isForBoys: widget.isForBoys,
+                );
               } else {
                 // Default to Cricket
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => LiveCricketScoreScreen(
-                      matchId: match.id,
-                      sportName: widget.sportName,
-                      teamAName: match.teamA,
-                      teamBName: match.teamB,
-                      isForBoys: widget.isForBoys,
-                      onGenderToggle: widget.onGenderToggle,
-                      isAdmin: false, // User view
-                    ),
-                  ),
-                ).then((_) => _refreshAllMatches());
+                screen = LiveCricketScoreScreen(
+                  matchId: match.id,
+                  sportName: widget.sportName,
+                  teamAName: match.teamA,
+                  teamBName: match.teamB,
+                  isForBoys: widget.isForBoys,
+                  onGenderToggle: widget.onGenderToggle,
+                  isAdmin: false,
+                );
               }
-              // --- END FIXED ROUTING LOGIC ---
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => _refreshAllMatches());
             } else if (category == 'Upcoming') {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -370,73 +399,106 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
             _buildCardHeader(context, category, match.status),
             const SizedBox(height: 12),
             if (category == 'Upcoming') _buildUpcomingMatchContent(context, match),
-            if (category == 'Live') _buildLiveMatchContent(context, match),
-            if (category == 'Recent') _buildRecentMatchContent(context, match),
+            if (category == 'Live' || category == 'Recent') _buildLiveOrRecentMatchContent(context, match),
           ],
         ),
       ),
     );
   }
 
- Widget _buildRecentMatchContent(BuildContext context, FetchedMatch match) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTeamRow(context, match.teamA, match.scoreA),
-        const SizedBox(height: 8),
-        _buildTeamRow(context, match.teamB, match.scoreB),
-        const SizedBox(height: 12),
-        Text(
-          match.result ?? 'Match Finished',
-          style: TextStyle(
-              color: Theme.of(context).primaryColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 14),
-        ),
-      ],
-    );
-  }
+  Widget _buildLiveOrRecentMatchContent(BuildContext context, FetchedMatch match) {
+    // --- SPECIAL UI FOR ATHLETICS ---
+    if (widget.sportName == 'Athletics') {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+             Text(match.eventCategory ?? 'Race', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+             const SizedBox(height: 8),
+             Text("1. ${match.teamA}"),
+             Text("2. ${match.teamB}"),
+             if (match.teamC != null) Text("3. ${match.teamC}"),
+             const SizedBox(height: 12),
+             Text(match.summary ?? 'Race Status', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
+          ],
+        );
+    }
 
-  Widget _buildLiveMatchContent(BuildContext context, FetchedMatch match) {
-     return Column(
+    bool hideScores = widget.sportName == 'Carrom' || 
+                      widget.sportName == 'Table Tennis' || 
+                      widget.sportName == 'Badminton' || 
+                      widget.sportName == 'Chess';
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4.0),
           child: Row(
-             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     Text(match.teamA, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
-                     const SizedBox(height: 8),
-                     Text(match.teamB, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(match.teamA, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 8),
+                    Text(match.teamB, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(match.scoreA, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
-                   const SizedBox(height: 8),
-                  Text(match.scoreB, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                  if (!hideScores) ...[
+                    Text(match.scoreA, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                    const SizedBox(height: 8),
+                    Text(match.scoreB, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.secondary)),
+                  ],
                 ],
               ),
             ],
           ),
         ),
-         const SizedBox(height: 8),
+        const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.only(top: 4.0),
-          child: Text(match.summary ?? 'Match is live.', style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
+          child: Text(match.summary ?? (match.result ?? 'Match is live.'), style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor)),
         ),
       ],
     );
   }
 
   Widget _buildUpcomingMatchContent(BuildContext context, FetchedMatch match) {
+    if (widget.sportName == 'Athletics') {
+         return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(widget.sportIcon, color: Theme.of(context).primaryColor, size: 40),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(match.eventCategory ?? "Athletics Event", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text("${match.teamA}, ${match.teamB}, ${match.teamC ?? 'Team C'}", style: TextStyle(fontSize: 14, color: Colors.grey[800])),
+                  const SizedBox(height: 4),
+                  Text(match.venue, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(match.date, style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+                Text(match.time, style: TextStyle(color: Colors.grey[700])),
+              ],
+            )
+          ],
+        );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -479,31 +541,31 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
   }
 
   Widget _buildCardHeader(BuildContext context, String category, String matchStatus) {
-      Color headerColor;
-      Color textColor;
-      String displayText = category.toUpperCase();
+    Color headerColor;
+    Color textColor;
+    String displayText = category.toUpperCase();
 
-      switch (matchStatus) {
-        case 'live':
-          headerColor = Colors.red.shade100;
-          textColor = Colors.red.shade800;
-          displayText = 'LIVE';
-          break;
-        case 'upcoming':
-          headerColor = Colors.blue.shade100;
-          textColor = Colors.blue.shade800;
-           displayText = 'UPCOMING';
-          break;
-         case 'finished':
-          headerColor = Colors.grey.shade200;
-          textColor = Colors.grey.shade700;
-           displayText = 'RECENT';
-          break;
-        default:
-          headerColor = Colors.grey.shade200;
-          textColor = Colors.grey.shade700;
-          displayText = matchStatus.toUpperCase();
-      }
+    switch (matchStatus.toLowerCase()) {
+      case 'live':
+        headerColor = Colors.red.shade100;
+        textColor = Colors.red.shade800;
+        displayText = 'LIVE';
+        break;
+      case 'upcoming':
+        headerColor = Colors.blue.shade100;
+        textColor = Colors.blue.shade800;
+        displayText = 'UPCOMING';
+        break;
+      case 'finished':
+        headerColor = Colors.grey.shade200;
+        textColor = Colors.grey.shade700;
+        displayText = 'RECENT';
+        break;
+      default:
+        headerColor = Colors.grey.shade200;
+        textColor = Colors.grey.shade700;
+        displayText = matchStatus.toUpperCase();
+    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -527,31 +589,6 @@ class _SportsDetailsScreenState extends State<SportsDetailsScreen>
             ),
           ),
         ),
-      ],
-    );
-  }
-
- Widget _buildTeamRow(BuildContext context, String name, String score) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
-          child: Text(name.isNotEmpty ? name.substring(0, 1) : '?',
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(name,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16))),
-        Text(score,
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.secondary)),
       ],
     );
   }

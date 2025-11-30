@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async'; // For debounce
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/api_constants.dart'; // Import ApiConstants
 
 // --- ADD THESE IMPORTS ---
 import 'dart:io';
@@ -133,8 +134,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   Future<void> _fetchMatchPlayers() async {
      setState(() { _isLoadingPlayers = true; _playerFetchError = ''; });
     try {
-      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-      final response = await http.get( Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
+      // --- FIX: Use ApiConstants ---
+      final response = await http.get( Uri.parse('${ApiConstants.baseUrl}/api/get_match_details/${widget.matchId}'));
       if (mounted) {
         if (response.statusCode == 200) {
           final matchDetails = json.decode(response.body);
@@ -161,10 +162,9 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
   // Load Existing State from Backend
   Future<void> _loadExistingLiveState() async {
      setState(() => _isLoadingPlayers = true); // Show loading indicator while fetching state
-     const String host = kIsWeb ? 'localhost' : '172.16.253.246';
      
-     // --- CRITICAL FIX: Changed URL from get_live_updates to get_live_score ---
-     final String apiUrl = 'http://$host:5000/api/get_live_score/${widget.matchId}'; 
+     // --- FIX: Use ApiConstants ---
+     final String apiUrl = '${ApiConstants.baseUrl}/api/get_live_score/${widget.matchId}'; 
      // ------------------------------------------------------------------------
 
      try {
@@ -347,8 +347,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
         } else if (mounted && response.statusCode == 404) {
             print("No existing live update data found for match ${widget.matchId}. Starting fresh.");
              // Check actual match status to decide phase
-             const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-             final statusResponse = await http.get(Uri.parse('http://$host:5000/api/get_match_details/${widget.matchId}'));
+             // --- FIX: Use ApiConstants ---
+             final statusResponse = await http.get(Uri.parse('${ApiConstants.baseUrl}/api/get_match_details/${widget.matchId}'));
              if (mounted && statusResponse.statusCode == 200) {
                  final details = json.decode(statusResponse.body);
                  setState(() {
@@ -376,8 +376,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     setState(() => _isSaving = true);
     print("Sending update for phase: $_currentPhase");
 
-    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-    final String apiUrl = 'http://$host:5000/api/update_live_score/${widget.matchId}';
+    // --- FIX: Use ApiConstants ---
+    final String apiUrl = '${ApiConstants.baseUrl}/api/update_live_score/${widget.matchId}';
 
     List<Map<String, dynamic>> team1BattingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
     List<Map<String, dynamic>> team2BowlingData = _fetchedTeamBPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
@@ -733,8 +733,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
       const SnackBar(content: Text('Starting download...'), backgroundColor: Colors.blue),
     );
 
-    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-    final String apiUrl = 'http://$host:5000/api/download_scorecard_pdf/${widget.matchId}';
+    // --- FIX: Use ApiConstants ---
+    final String apiUrl = '${ApiConstants.baseUrl}/api/download_scorecard_pdf/${widget.matchId}';
     final String downloadFileName = 'scorecard_match_${widget.matchId}.pdf';
 
     try {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/api_constants.dart'; // Import ApiConstants
 
 class LiveKabaddiScoreScreen extends StatefulWidget {
   final int matchId;
@@ -67,11 +68,9 @@ class _LiveKabaddiScoreScreenState extends State<LiveKabaddiScoreScreen> {
 
   // --- API LOGIC ---
   Future<void> _fetchScore() async {
-    // REPLACE THIS WITH YOUR IP ADDRESS
-    const String host = kIsWeb ? 'localhost' : '192.168.1.12'; 
-    
     try {
-      final res = await http.get(Uri.parse('http://$host:5000/api/get_kabaddi_live_score/${widget.matchId}'));
+      // --- FIX: Use ApiConstants ---
+      final res = await http.get(Uri.parse('${ApiConstants.baseUrl}/api/get_kabaddi_live_score/${widget.matchId}'));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) {
@@ -114,12 +113,10 @@ class _LiveKabaddiScoreScreenState extends State<LiveKabaddiScoreScreen> {
     if (_isUpdating) return;
     setState(() => _isUpdating = true);
 
-    // REPLACE THIS WITH YOUR IP ADDRESS
-    const String host = kIsWeb ? 'localhost' : '192.168.1.12';
-    
     try {
+      // --- FIX: Use ApiConstants ---
       await http.post(
-        Uri.parse('http://$host:5000/api/update_kabaddi_score/${widget.matchId}'),
+        Uri.parse('${ApiConstants.baseUrl}/api/update_kabaddi_score/${widget.matchId}'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'team_a_score': _scoreA,
@@ -329,9 +326,13 @@ class _LiveKabaddiScoreScreenState extends State<LiveKabaddiScoreScreen> {
   Widget build(BuildContext context) {
     final gradient = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors;
     
-    // Determine App Bar Title
-    String appBarTitle = "Kabaddi - $_currentHalf";
-    if (_isMatchFinished) appBarTitle = "Kabaddi - Result";
+    // --- UPDATED TITLE LOGIC ---
+    String appBarTitle;
+    if (_isMatchFinished) {
+      appBarTitle = "Kabaddi Recent";
+    } else {
+      appBarTitle = "Kabaddi Live";
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(appBarTitle), backgroundColor: const Color(0xFF0A4F43)),

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'dart:convert'; // Ensures 'json' is defined
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import '../../../core/app_theme.dart';
-// --- MODIFICATION: Import AdminUpdateScoreScreen for navigation ---
+import '../../../core/api_constants.dart'; // Import ApiConstants
 import 'admin_update_score_screen.dart';
-// --- END MODIFICATION ---
 
-// --- ADD THESE IMPORTS ---
+// --- ADD THESE IMPORTS FOR PDF ---
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
@@ -66,17 +65,17 @@ class PlayerScore {
 }
 
 // ==========================================
-// 2. LIVE CRICKET SCORE VIEWER (The Details Screen)
+// 2. LIVE CRICKET SCORE VIEWER
 // ==========================================
 
 class LiveCricketScoreScreen extends StatefulWidget {
   final int matchId;
   final String sportName;
-  final String teamAName; // Keep these for initial display/fallback
-  final String teamBName; // Keep these for initial display/fallback
+  final String teamAName;
+  final String teamBName;
   final bool isForBoys;
   final Function(bool) onGenderToggle;
-  final bool isAdmin; // Keep isAdmin flag
+  final bool isAdmin;
 
   const LiveCricketScoreScreen({
     super.key,
@@ -86,7 +85,7 @@ class LiveCricketScoreScreen extends StatefulWidget {
     required this.teamBName,
     required this.isForBoys,
     required this.onGenderToggle,
-    required this.isAdmin, // Keep isAdmin flag
+    required this.isAdmin,
   });
 
   @override
@@ -94,16 +93,15 @@ class LiveCricketScoreScreen extends StatefulWidget {
 }
 
 class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
-  // --- Updated State Variables ---
-  Map<String, dynamic>? _liveScoreData; // Still useful for top-level info
+  // --- State Variables ---
+  Map<String, dynamic>? _liveScoreData;
   List<PlayerScore> _teamABatting = [];
   List<PlayerScore> _teamBBowling = [];
   List<PlayerScore> _teamBBatting = [];
   List<PlayerScore> _teamABowling = [];
   int _teamAExtras = 0;
   int _teamBExtras = 0;
-  bool _isFirstInnings = true; // Track current innings
-  // --- End Updated State Variables ---
+  bool _isFirstInnings = true;
 
   bool _isLoading = true;
   String _errorMessage = '';
@@ -114,8 +112,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
   List<String> _team1TimelineData = []; 
   List<String> _team2TimelineData = []; 
 
-  bool _isDownloadingPdf = false; // Added for PDF download state
-  bool _isMatchFinished = false; // Added to track match status
+  bool _isDownloadingPdf = false;
+  bool _isMatchFinished = false;
 
   @override
   void initState() {
@@ -145,9 +143,9 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     }
 
     try {
-      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
+      // --- UPDATED: Use ApiConstants.baseUrl ---
       final response = await http.get(
-          Uri.parse('http://$host:5000/api/get_live_score/${widget.matchId}'));
+          Uri.parse('${ApiConstants.baseUrl}/api/get_live_score/${widget.matchId}'));
 
       if (mounted) {
         if (response.statusCode == 200) {
@@ -157,12 +155,11 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
           List<PlayerScore> parsePlayerList(List<dynamic>? data) {
             if (data == null) return [];
             return data
-                .whereType<Map<String, dynamic>>() // Filter out non-map items
+                .whereType<Map<String, dynamic>>()
                 .map((item) => PlayerScore.fromJson(item))
                 .toList();
           }
           
-          // --- FIX: Handle Integer vs Boolean mismatch for is_first_innings ---
           bool parsedIsFirstInnings = true;
           if (fetchedData['is_first_innings'] != null) {
             if (fetchedData['is_first_innings'] is bool) {
@@ -183,7 +180,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
           }
 
           setState(() {
-            _liveScoreData = fetchedData; // Store the raw map too
+            _liveScoreData = fetchedData;
             _teamABatting = parsePlayerList(fetchedData['team1_batting']);
             _teamBBowling = parsePlayerList(fetchedData['team2_bowling']);
             _teamBBatting = parsePlayerList(fetchedData['team2_batting']);
@@ -195,7 +192,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
             _team2TimelineData = List<String>.from(fetchedData['team2_timeline'] ?? []);
             _isLoading = false;
             _errorMessage = ''; 
-            _isMatchFinished = isFinished; // Update local state
+            _isMatchFinished = isFinished;
           });
 
         } else {
@@ -206,7 +203,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
                _isLoading = false; 
              });
           }
-          print("Live Score Fetch Error ${response.statusCode}: $error");
         }
       }
     } catch (e) {
@@ -218,7 +214,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               _isLoading = false; 
             });
          }
-        print("Live Score Connection Error: $e");
       }
     }
   }
@@ -230,8 +225,8 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       const SnackBar(content: Text('Starting download...'), backgroundColor: Colors.blue),
     );
 
-    const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-    final String apiUrl = 'http://$host:5000/api/download_scorecard_pdf/${widget.matchId}';
+    // --- UPDATED: Use ApiConstants.baseUrl ---
+    final String apiUrl = '${ApiConstants.baseUrl}/api/download_scorecard_pdf/${widget.matchId}';
     final String downloadFileName = 'scorecard_match_${widget.matchId}.pdf';
 
     try {
@@ -317,15 +312,18 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
         ? AppTheme.boysGradientColors
         : AppTheme.girlsGradientColors;
 
-    // Dynamic Title Logic
-    String titleStatus = "Live";
+    // --- UPDATED TITLE LOGIC ---
+    // If match is finished, show "Sport Recent". Otherwise "Sport Live".
+    String appBarTitle;
     if (_isMatchFinished) {
-      titleStatus = "Recent";
+      appBarTitle = "${widget.sportName} Recent";
+    } else {
+      appBarTitle = "${widget.sportName} Live";
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.sportName} - $titleStatus'), // Updated title
+        title: Text(appBarTitle),
         elevation: 0,
       ),
       body: AnimatedContainer(
@@ -355,7 +353,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
-          child: Column( // Added Column for refresh button
+          child: Column( 
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
                Text(
@@ -407,7 +405,6 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
               ),
             ),
           ),
-          // FIXED: Hide update button if match is finished
           if (widget.isAdmin && !_isMatchFinished) _buildAdminScoreButton(),
         ],
       ),
@@ -1070,307 +1067,3 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     );
   }
 } // End of _LiveCricketScoreScreenState
-
-
-// ==========================================
-// 3. MATCH LIST SCREEN (Schedule/Recent/Live List)
-// ==========================================
-
-class CricketMatchListScreen extends StatefulWidget {
-  final bool isForBoys;
-  final Function(bool) onGenderToggle;
-
-  const CricketMatchListScreen({
-    super.key,
-    required this.isForBoys,
-    required this.onGenderToggle,
-  });
-
-  @override
-  State<CricketMatchListScreen> createState() => _CricketMatchListScreenState();
-}
-
-class _CricketMatchListScreenState extends State<CricketMatchListScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // FIXED: AppTheme.boysColor/girlsColor don't exist. Use Theme.of(context).primaryColor or define colors.
-    // Using primaryColor is safe as theme is toggled at root.
-    final primaryColor = Theme.of(context).primaryColor;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cricket Matches'),
-        backgroundColor: primaryColor,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: 'Live'),
-            Tab(text: 'Upcoming'),
-            Tab(text: 'Recent'), // This tab shows finished matches
-          ],
-        ),
-        actions: [
-          Switch(
-            value: widget.isForBoys,
-            activeThumbColor: Colors.white,
-            onChanged: widget.onGenderToggle,
-          ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _MatchListTab(status: 'live', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
-          _MatchListTab(status: 'upcoming', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
-          _MatchListTab(status: 'recent', isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle),
-        ],
-      ),
-    );
-  }
-}
-
-class _MatchListTab extends StatefulWidget {
-  final String status;
-  final bool isForBoys;
-  // ADDED: onGenderToggle needed for passing to details screen
-  final Function(bool) onGenderToggle;
-
-  const _MatchListTab({required this.status, required this.isForBoys, required this.onGenderToggle});
-
-  @override
-  State<_MatchListTab> createState() => _MatchListTabState();
-}
-
-class _MatchListTabState extends State<_MatchListTab> {
-  List<dynamic> _matches = [];
-  bool _isLoading = true;
-  String _errorMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchMatches();
-  }
-
-  Future<void> _fetchMatches() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      const String host = kIsWeb ? 'localhost' : '172.16.253.246';
-      // Calls backend to get matches based on status (live, upcoming, recent)
-      final response = await http.get(Uri.parse(
-          'http://$host:5000/api/get_matches/cricket?status=${widget.status}'));
-
-      if (response.statusCode == 200) {
-        if (mounted) {
-          setState(() {
-            _matches = json.decode(response.body);
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Failed to load matches';
-            _isLoading = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Connection Error: $e';
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage.isNotEmpty) {
-      return Center(
-          child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(_errorMessage, style: const TextStyle(color: Colors.red)),
-          const SizedBox(height: 10),
-          ElevatedButton(
-              onPressed: _fetchMatches, child: const Text('Retry'))
-        ],
-      ));
-    }
-
-    if (_matches.isEmpty) {
-      return Center(
-          child: Text('No ${widget.status} matches found.',
-              style: const TextStyle(color: Colors.grey)));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _fetchMatches,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(8.0),
-        itemCount: _matches.length,
-        itemBuilder: (context, index) {
-          final match = _matches[index];
-          return _buildMatchCard(context, match);
-        },
-      ),
-    );
-  }
-
-  Widget _buildMatchCard(BuildContext context, Map<String, dynamic> match) {
-    // --- ADDED: Material + InkWell Wrapper for Clickability ---
-    return Card(
-      elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.1),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      clipBehavior: Clip.antiAlias, // Ensures ripple effect respects corners
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        // InkWell wraps the content to capture taps on the entire card
-        onTap: () {
-            // Logic to navigate
-            int? matchId;
-            if (match['id'] is int) {
-              matchId = match['id'];
-            } else if (match['id'] is String) {
-              matchId = int.tryParse(match['id']);
-            }
-
-            if (matchId != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LiveCricketScoreScreen(
-                    matchId: matchId!,
-                    sportName: 'Cricket',
-                    teamAName: match['teamA'] ?? 'Team A',
-                    teamBName: match['teamB'] ?? 'Team B',
-                    isForBoys: widget.isForBoys,
-                    isAdmin: false, // User mode (View Only)
-                    onGenderToggle: widget.onGenderToggle, // Pass the toggle
-                  ),
-                ),
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Error: Invalid Match ID')),
-              );
-            }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: match['status'] == 'live' ? Colors.red.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      match['status'].toString().toUpperCase(),
-                      style: TextStyle(
-                        color: match['status'] == 'live'
-                            ? Colors.red
-                            : Colors.grey[700],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    "${match['date']} ${match['time']}",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                ],
-              ),
-              const Divider(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(match['teamA'],
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        // Show scores if not upcoming
-                        if (widget.status != 'upcoming')
-                          Text(match['scoreA'] ?? '0/0',
-                              style: const TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text("VS",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.grey[400])),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(match['teamB'],
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        if (widget.status != 'upcoming')
-                          Text(match['scoreB'] ?? '0/0',
-                              style: const TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(match['venue'] ?? "Unknown Venue",
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
