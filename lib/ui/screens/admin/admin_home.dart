@@ -233,6 +233,8 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // --- LIVE MATCHES CAROUSEL ---
+          // This widget handles fetching its own data.
+          // Ensure your backend API is returning scores in 'get_matches' as per the previous fix.
           LiveMatchesCarousel(
             isForBoys: widget.isForBoys,
             isAdmin: true, // We are in Admin Home

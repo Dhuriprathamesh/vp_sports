@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/api_constants.dart';
+
+// --- Import All Live Score Screens ---
 import '../common/live_football_score_screen.dart';
 import '../common/live_cricket_score_screen.dart';
 import '../common/live_kabaddi_score_screen.dart';
@@ -13,7 +15,7 @@ import '../common/live_carrom_score_screen.dart';
 import '../common/live_table_tennis_score_screen.dart';
 import '../common/live_badminton_score_screen.dart';
 import '../common/live_athletics_score_screen.dart';
-import '../common/live_basketball_score_screen.dart'; // Added Basketball Import
+import '../common/live_basketball_score_screen.dart';
 
 class MatchDetailsScreen extends StatefulWidget {
   final int matchId;
@@ -42,22 +44,22 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Map<String, dynamic>? _matchDetails;
   bool _isLoading = true;
   String _errorMessage = '';
-  late final TabController _tabController;
+  late TabController _tabController;
   late final AnimationController _headerController;
   late final Animation<double> _headerAnimation;
 
   @override
   void initState() {
     super.initState();
-    // Athletics has 4 tabs (Info + 3 Teams), others have 3 (Info + 2 Teams)
+    // Initialize Tab Controller based on sport (Athletics needs 4 tabs)
     int tabs = widget.sportName == 'Athletics' ? 4 : 3;
     _tabController = TabController(length: tabs, vsync: this);
-    
+
     _headerController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
     _headerAnimation =
         CurvedAnimation(parent: _headerController, curve: Curves.easeOut);
-        
+
     _fetchMatchDetails();
   }
 
@@ -74,6 +76,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       _errorMessage = '';
     });
     try {
+      // Calls the fixed backend endpoint that supports all sports
       final response = await http.get(Uri.parse(
           '${ApiConstants.baseUrl}/api/get_match_details/${widget.matchId}?sport=${widget.sportName}'));
 
@@ -85,7 +88,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           _headerController.forward();
         } else {
           setState(() {
-            _errorMessage = 'Failed to load match details.';
+            _errorMessage = 'Failed to load match details (${response.statusCode}).';
           });
         }
       }
@@ -121,16 +124,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           Widget nextScreen;
           String sport = widget.sportName;
 
+          // --- Navigation Logic for All 10 Sports ---
           if (sport == 'Athletics') {
-              nextScreen = LiveAthleticsScoreScreen(
-                  matchId: widget.matchId,
-                  teamAName: _matchDetails!['team_a_name'],
-                  teamBName: _matchDetails!['team_b_name'],
-                  teamCName: _matchDetails!['team_c_name'] ?? 'Team C',
-                  eventCategory: _matchDetails!['event_category'] ?? 'Race',
-                  isAdmin: true,
-                  isForBoys: widget.isForBoys,
-              );
+            nextScreen = LiveAthleticsScoreScreen(
+              matchId: widget.matchId,
+              teamAName: _matchDetails!['team_a_name'],
+              teamBName: _matchDetails!['team_b_name'],
+              teamCName: _matchDetails!['team_c_name'] ?? 'Team C',
+              eventCategory: _matchDetails!['info']['Category'] ?? 'Race',
+              isAdmin: true,
+              isForBoys: widget.isForBoys,
+            );
           } else if (sport == 'Football') {
             nextScreen = LiveFootballScoreScreen(
               matchId: widget.matchId,
@@ -154,9 +158,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               teamBName: _matchDetails!['team_b_name'],
               isAdmin: true,
               isForBoys: widget.isForBoys,
-              matchFormat: _matchDetails!['match_format'] ?? 'Best of 3 Sets',
+              matchFormat: _matchDetails!['info']['Format'] ?? 'Best of 3 Sets',
             );
-          } else if (sport == 'Basketball') { // Added Basketball Logic
+          } else if (sport == 'Basketball') {
             nextScreen = LiveBasketballScoreScreen(
               matchId: widget.matchId,
               teamAName: _matchDetails!['team_a_name'],
@@ -242,7 +246,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (sportName == 'Athletics') return {'players': 5, 'subs': 0};
     
     switch (sportName) {
-      case 'Basketball': return {'players': 10, 'subs': 5}; // Added Basketball
+      case 'Basketball': return {'players': 5, 'subs': 5};
       case 'Cricket': return {'players': 11, 'subs': 4};
       case 'Football': return {'players': 11, 'subs': 5};
       case 'Kabaddi': return {'players': 7, 'subs': 5};
@@ -250,7 +254,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       case 'Carrom': return {'players': 5, 'subs': 0};
       case 'Table Tennis': return {'players': 5, 'subs': 0};
       case 'Badminton': return {'players': 5, 'subs': 0};
-      default: return {'players': 1, 'subs': 0};
+      case 'Chess': return {'players': 5, 'subs': 0};
+      default: return {'players': 11, 'subs': 0};
     }
   }
 
@@ -277,7 +282,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         ),
         child: _buildBody(),
       ),
-      bottomNavigationBar: widget.isAdmin ? _buildStartMatchButton() : null,
+      bottomNavigationBar: (widget.isAdmin &&
+              _matchDetails != null &&
+              _matchDetails!['match_status'] == 'upcoming')
+          ? _buildStartMatchButton()
+          : null,
     );
   }
 
@@ -288,7 +297,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
     if (_errorMessage.isNotEmpty) {
       return Center(
-          child: Text(_errorMessage, style: const TextStyle(color: Colors.white)));
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text(_errorMessage, style: const TextStyle(color: Colors.white, fontSize: 16)),
+          ));
     }
     if (_matchDetails == null) {
       return const Center(
@@ -308,16 +320,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               _buildInfoTab(),
               _buildPlayerListTab(
                   _matchDetails!['team_a_name'],
-                  List<String>.from(
-                      _matchDetails!['team_a_players'] ?? [])),
+                  _matchDetails!['team_a_players']),
               _buildPlayerListTab(
                   _matchDetails!['team_b_name'],
-                  List<String>.from(
-                      _matchDetails!['team_b_players'] ?? [])),
+                  _matchDetails!['team_b_players']),
               if (widget.sportName == 'Athletics')
                  _buildPlayerListTab(
                     _matchDetails!['team_c_name'] ?? 'Team C', 
-                    List<String>.from(_matchDetails!['team_c_players'] ?? [])
+                    _matchDetails!['team_c_players']
                  ),
             ],
           ),
@@ -335,9 +345,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           margin: const EdgeInsets.all(16.0),
           decoration: BoxDecoration(
-            color: Colors.black.withAlpha(51),
+            color: Colors.black.withOpacity(0.2),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withAlpha(77)),
+            border: Border.all(color: Colors.white.withOpacity(0.3)),
           ),
           child: Row(
             children: [
@@ -358,7 +368,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     const SizedBox(height: 4),
                     Text("vs",
                         style: TextStyle(
-                            color: Colors.white.withAlpha(200),
+                            color: Colors.white.withOpacity(0.8),
                             fontWeight: FontWeight.bold))
                   ],
                 ),
@@ -401,21 +411,21 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(38),
+        color: Colors.black.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: TabBar(
         controller: _tabController,
         labelColor: Theme.of(context).primaryColor,
-        unselectedLabelColor: Colors.white.withAlpha(230),
+        unselectedLabelColor: Colors.white.withOpacity(0.9),
         labelStyle: const TextStyle(fontWeight: FontWeight.bold),
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
-          color: Colors.white.withAlpha(242),
+          color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withAlpha(26),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 4,
                 offset: const Offset(0, 2))
           ],
@@ -431,100 +441,58 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   }
 
   Widget _buildInfoTab() {
-    final startTime = DateTime.parse(_matchDetails!['start_time']);
-    final isFootball = widget.sportName == 'Football';
-    final isKabaddi = widget.sportName == 'Kabaddi';
-    final isVolleyball = widget.sportName == 'Volleyball';
-    final isTableTennis = widget.sportName == 'Table Tennis';
-    final isBadminton = widget.sportName == 'Badminton';
-    final isAthletics = widget.sportName == 'Athletics';
-    final isBasketball = widget.sportName == 'Basketball'; // Added Basketball Check
-
-    // Helper to safely join lists
-    String getOfficials() {
-      if (isFootball) {
-        return (_matchDetails!['referees'] as List? ?? []).join(', ');
-      }
-      if (isKabaddi || isVolleyball || isAthletics) {
-        return (_matchDetails!['officials'] as List? ?? []).join(', ');
-      }
-      return (_matchDetails!['umpires'] as List? ?? []).join(', ');
+    // Parse time safely
+    DateTime? startTime;
+    try {
+      startTime = DateTime.parse(_matchDetails!['date']);
+    } catch (e) {
+      startTime = DateTime.now();
     }
 
-    String getDurationLabel() {
-      if (isFootball || isKabaddi) return 'Duration';
-      if (isVolleyball) return 'Format';
-      if (isBasketball) return 'Quarters'; // Added for Basketball
-      return 'Overs';
+    final Map<String, dynamic> info = _matchDetails!['info'] ?? {};
+    
+    // --- Helper for formatting lists/strings ---
+    String formatInfoValue(dynamic val) {
+      if (val is List) return val.join(', ');
+      return val.toString();
     }
-
-    String getDurationValue() {
-      if (isFootball || isKabaddi) {
-        return "${_matchDetails!['match_duration']} mins";
-      }
-      if (isVolleyball) return "${_matchDetails!['match_format']}";
-      if (isBasketball) return "${_matchDetails!['total_quarters']}"; // Added for Basketball
-      return "${_matchDetails!['overs_per_innings']}";
-    }
-
-    IconData getDurationIcon() {
-      if (isFootball || isKabaddi) return Icons.timer;
-      if (isVolleyball) return Icons.sports_volleyball;
-      if (isBasketball) return Icons.timer; // Added for Basketball
-      return Icons.sports_cricket_outlined;
-    }
-
-    // Determine if we should show the duration/overs row
-    final bool showDurationRow = !isTableTennis &&
-        !isBadminton &&
-        !isAthletics && 
-        widget.sportName != 'Chess' &&
-        widget.sportName != 'Carrom';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Card(
         elevation: 2,
-        shadowColor: Colors.black.withAlpha(26),
+        shadowColor: Colors.black.withOpacity(0.1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
               _buildInfoRow(Icons.calendar_today, 'Date',
-                  DateFormat.yMMMMd().format(startTime)),
+                  DateFormat.yMMMMd().format(startTime!)),
               const Divider(),
               _buildInfoRow(
                   Icons.schedule, 'Time', DateFormat.jm().format(startTime)),
               const Divider(),
               _buildInfoRow(Icons.location_on_outlined, 'Venue',
                   _matchDetails!['venue']),
-              const Divider(),
-              _buildInfoRow(Icons.sports, 'Officials', getOfficials()),
-
-              if (showDurationRow) ...[
-                const Divider(),
-                _buildInfoRow(
-                    getDurationIcon(), getDurationLabel(), getDurationValue()),
-              ],
-
-              // Specific Table Tennis & Badminton & Basketball Fields
-              if (isTableTennis || isBadminton || isBasketball) ...[
-                const Divider(),
-                _buildInfoRow(Icons.category, 'Category',
-                    "${_matchDetails!['category'] ?? 'N/A'}"),
-                if (!isBasketball) ...[
-                    const Divider(),
-                    _buildInfoRow(Icons.format_list_numbered, 'Total Sets',
-                    "${_matchDetails!['total_sets'] ?? 'N/A'}"),
-                ]
-              ],
               
-              if (isAthletics) ...[
-                   const Divider(),
-                   _buildInfoRow(Icons.category, 'Event', 
-                       _matchDetails!['event_category'] ?? 'N/A'),
-              ],
+              // --- Dynamic Info Fields from API ---
+              if (info.isNotEmpty) ...[
+                 const Divider(),
+                 ...info.entries.map((entry) {
+                    IconData icon = Icons.info_outline;
+                    if (entry.key.contains('Umpires') || entry.key.contains('Officials') || entry.key.contains('Referees')) icon = Icons.sports;
+                    if (entry.key.contains('Overs') || entry.key.contains('Duration') || entry.key.contains('Time')) icon = Icons.timer;
+                    if (entry.key.contains('Category') || entry.key.contains('Format')) icon = Icons.category;
+                    
+                    return Column(
+                      children: [
+                        _buildInfoRow(icon, entry.key, formatInfoValue(entry.value)),
+                        const Divider(),
+                      ],
+                    );
+                 })
+              ]
             ],
           ),
         ),
@@ -536,12 +504,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: Theme.of(context).primaryColor, size: 20),
           const SizedBox(width: 16),
           Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
-          const Spacer(),
-          Flexible(
+          Expanded(
               child: Text(value,
                   style: TextStyle(color: Colors.grey[800]),
                   textAlign: TextAlign.right)),
@@ -550,7 +518,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
-  Widget _buildPlayerListTab(String teamName, List<String> players) {
+  Widget _buildPlayerListTab(String teamName, dynamic playersRaw) {
+    List<String> players = [];
+    if (playersRaw is List) {
+      players = playersRaw.map((e) => e.toString()).where((e) => e.toString().isNotEmpty).toList();
+    }
+
     if (players.isEmpty) {
       return const Center(
           child: Text("No player data available.",
@@ -569,7 +542,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           margin: const EdgeInsets.symmetric(vertical: 4),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: Theme.of(context).primaryColor.withAlpha(26),
+              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
               child: Text("${index + 1}",
                   style: TextStyle(
                       color: Theme.of(context).primaryColor,
@@ -594,7 +567,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withAlpha(26),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 8,
                 offset: const Offset(0, -4))
           ]),
@@ -611,6 +584,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           label: const Text('Start Match'),
           style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 50),
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Colors.white,
               textStyle:
                   const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ),

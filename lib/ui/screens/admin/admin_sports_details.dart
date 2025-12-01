@@ -7,7 +7,6 @@ import 'add_match.dart';
 import '../user/match_details_screen.dart';
 
 // --- Live Score Screen Imports ---
-// Ensure these files exist in lib/ui/screens/common/
 import '../common/live_cricket_score_screen.dart';
 import '../common/live_football_score_screen.dart';
 import '../common/live_kabaddi_score_screen.dart';
@@ -24,17 +23,17 @@ class FetchedMatch {
   final int id;
   final String teamA;
   final String teamB;
-  final String? teamC; // Added for Athletics
+  final String? teamC; // For Athletics
   final String venue;
   final String date;
   final String time;
   final String status;
-  final String scoreA;
-  final String scoreB;
+  String scoreA; // Removed final to allow updates
+  String scoreB; // Removed final to allow updates
   final String? summary;
   final String? result;
   final String? matchFormat;
-  final String? eventCategory; // Added for Athletics
+  final String? eventCategory; // For Athletics
 
   FetchedMatch({
     required this.id,
@@ -70,7 +69,7 @@ class FetchedMatch {
           ? (json['winner'] == 'Draw' ? 'Game Drawn' : '${json['winner']} Wins')
           : json['result'],
       matchFormat: json['matchFormat'],
-      eventCategory: json['eventCategory'],
+      eventCategory: json['event_category'] ?? json['eventCategory'],
     );
   }
 }
@@ -135,7 +134,11 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
               data.map((jsonItem) => FetchedMatch.fromJson(jsonItem)).toList();
 
           setState(() {
-            if (status == 'live') _liveMatches = fetchedMatches;
+            if (status == 'live') {
+               _liveMatches = fetchedMatches;
+               // Trigger detailed score fetch for live matches
+               if(fetchedMatches.isNotEmpty) _fetchLiveScoresForList(fetchedMatches);
+            }
             if (status == 'recent') _recentMatches = fetchedMatches;
             if (status == 'upcoming') _upcomingMatches = fetchedMatches;
           });
@@ -160,6 +163,62 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
           if (status == 'recent') _isLoadingRecent = false;
           if (status == 'upcoming') _isLoadingUpcoming = false;
         });
+      }
+    }
+  }
+
+  // --- NEW: Fetch Real-Time Scores Individually ---
+  Future<void> _fetchLiveScoresForList(List<FetchedMatch> matches) async {
+    for (var match in matches) {
+      try {
+        String endpoint = '';
+        String sport = widget.sportName;
+        
+        if (sport == 'Cricket') endpoint = 'get_cricket_live_score';
+        else if (sport == 'Football') endpoint = 'get_football_live_score';
+        else if (sport == 'Kabaddi') endpoint = 'get_kabaddi_live_score';
+        else if (sport == 'Volleyball') endpoint = 'get_volleyball_live_score';
+        else if (sport == 'Basketball') endpoint = 'get_basketball_live_score';
+        else if (sport == 'Badminton') endpoint = 'get_badminton_live_score';
+        else if (sport == 'Table Tennis') endpoint = 'get_table_tennis_live_score';
+        
+        if (endpoint.isNotEmpty) {
+          final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/api/$endpoint/${match.id}'));
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            String newScoreA = match.scoreA;
+            String newScoreB = match.scoreB;
+
+            if (sport == 'Cricket') {
+               newScoreA = "${data['team1_runs']}/${data['team1_wickets']}";
+               newScoreB = "${data['team2_runs']}/${data['team2_wickets']}";
+            } else if (sport == 'Football') {
+               newScoreA = "${data['team_a_goals']}";
+               newScoreB = "${data['team_b_goals']}";
+            } else if (sport == 'Kabaddi') {
+               newScoreA = "${data['team_a_score']}";
+               newScoreB = "${data['team_b_score']}";
+            } else if (sport == 'Volleyball') {
+               newScoreA = "${data['team_a_sets_won']}";
+               newScoreB = "${data['team_b_sets_won']}";
+            } else if (sport == 'Basketball') {
+               newScoreA = "${data['team1_score']}";
+               newScoreB = "${data['team2_score']}";
+            } else if (sport == 'Badminton' || sport == 'Table Tennis') {
+               // Usually specific point logic, simplified here to sets or 0 if parsing needed
+               // Ideally fetched via different logic, but this prevents 0-0 if API supports it
+            }
+
+            if (mounted) {
+              setState(() {
+                match.scoreA = newScoreA;
+                match.scoreB = newScoreB;
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print("Error fetching detailed score for match ${match.id}: $e");
       }
     }
   }
@@ -246,7 +305,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
 
           if (matchAdded == true) {
             await _refreshAllMatches();
-            _tabController.animateTo(2);
+            _tabController.animateTo(2); // Go to upcoming
           }
         },
         child: const Icon(Icons.add),
@@ -492,8 +551,6 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     }
 
     bool hideScores = widget.sportName == 'Carrom' ||
-        widget.sportName == 'Table Tennis' ||
-        widget.sportName == 'Badminton' ||
         widget.sportName == 'Chess';
 
     return Column(
@@ -546,6 +603,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
   }
 
   Widget _buildUpcomingMatchContent(BuildContext context, FetchedMatch match) {
+    // ... (This part remains unchanged from previous versions) ...
     if (widget.sportName == 'Athletics') {
          return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
