@@ -15,6 +15,8 @@ import '../screens/common/live_table_tennis_score_screen.dart';
 import '../screens/common/live_badminton_score_screen.dart';
 import '../screens/common/live_athletics_score_screen.dart';
 import '../screens/common/live_basketball_score_screen.dart';
+import '../screens/common/live_dodgeball_score_screen.dart'; 
+import 'dart:async'; // Added for Timer
 
 class LiveMatchesCarousel extends StatefulWidget {
   final bool isForBoys;
@@ -35,45 +37,77 @@ class LiveMatchesCarousel extends StatefulWidget {
 class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
   List<Map<String, dynamic>> _allLiveMatches = [];
   bool _isLoading = true;
-
-  // List of all sports to check
-  final List<String> _sports = [
-    'Cricket', 'Football', 'Basketball', 'Kabaddi', 'Volleyball', 
-    'Badminton', 'Table Tennis', 'Carrom', 'Chess', 'Athletics'
-  ];
+  Timer? _fetchTimer; // Timer for continuous polling
 
   @override
   void initState() {
     super.initState();
     _fetchAllLiveMatches();
+    // Start continuous polling for lively updates (Changed to 5 seconds)
+    _fetchTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        _fetchAllLiveMatches(isBackground: true);
+      }
+    });
   }
 
-  Future<void> _fetchAllLiveMatches() async {
+  // Reload data when gender toggle changes
+  @override
+  void didUpdateWidget(covariant LiveMatchesCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isForBoys != widget.isForBoys) {
+      _fetchAllLiveMatches();
+    }
+  }
+  
+  @override
+  void dispose() {
+    _fetchTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchAllLiveMatches({bool isBackground = false}) async {
     if (!mounted) return;
+    if (!isBackground) setState(() => _isLoading = true);
     
     List<Map<String, dynamic>> tempMatches = [];
     
-    // Create a list of futures to fetch all simultaneously for speed
-    List<Future<void>> fetchTasks = _sports.map((sport) async {
+    // 1. Define Base Sports List
+    List<String> sportsToCheck = [
+      'Cricket', 'Basketball', 'Kabaddi', 'Volleyball', 
+      'Badminton', 'Table Tennis', 'Carrom', 'Chess', 'Athletics'
+    ];
+
+    // 2. Dynamic Sport Swap based on Gender
+    if (widget.isForBoys) {
+      sportsToCheck.add('Football');
+    } else {
+      sportsToCheck.add('Dodgeball');
+    }
+
+    String genderStr = widget.isForBoys ? 'Boys' : 'Girls';
+
+    // 3. Fetch Matches for all sports in parallel
+    List<Future<void>> fetchTasks = sportsToCheck.map((sport) async {
       try {
         final sportUrl = sport.toLowerCase().replaceAll(' ', '_');
+        // Add gender parameter to API call
         final response = await http.get(
-          Uri.parse('${ApiConstants.baseUrl}/api/get_matches/$sportUrl?status=live')
+          Uri.parse('${ApiConstants.baseUrl}/api/get_matches/$sportUrl?status=live&gender=$genderStr')
         );
 
         if (response.statusCode == 200) {
           final List<dynamic> data = json.decode(response.body);
           for (var match in data) {
-            // Add the sport name to the match object for UI/Navigation
             if (match is Map<String, dynamic>) {
-              match['sportName'] = sport;
+              match['sportName'] = sport; // Tag the sport name for UI
               tempMatches.add(match);
             }
           }
         }
       } catch (e) {
-        // Silently fail for individual sports so one error doesn't break the whole carousel
-        debugPrint('Error fetching live $sport: $e');
+        // Silently fail for individual sports
+        debugPrint('Error fetching live data for $sport: $e');
       }
     }).toList();
 
@@ -95,8 +129,14 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
     
     Widget screen;
 
+    // --- Navigation Logic ---
     if (sport == 'Football') {
       screen = LiveFootballScoreScreen(
+        matchId: matchId, teamAName: teamA, teamBName: teamB,
+        isAdmin: widget.isAdmin, isForBoys: widget.isForBoys,
+      );
+    } else if (sport == 'Dodgeball') { 
+      screen = LiveDodgeballScoreScreen(
         matchId: matchId, teamAName: teamA, teamBName: teamB,
         isAdmin: widget.isAdmin, isForBoys: widget.isForBoys,
       );
@@ -116,7 +156,7 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
       screen = LiveVolleyballScoreScreen(
         matchId: matchId, teamAName: teamA, teamBName: teamB,
         isAdmin: widget.isAdmin, isForBoys: widget.isForBoys,
-        matchFormat: 'Standard', // API should provide this, default for now
+        matchFormat: 'Standard', 
       );
     } else if (sport == 'Basketball') {
       screen = LiveBasketballScoreScreen(
@@ -158,42 +198,67 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
-    }
-
-    if (_allLiveMatches.isEmpty) {
-      // Return empty if no matches
-      return const SizedBox.shrink(); 
-    }
+    // Determine height based on whether content exists
+    final double carouselHeight = _allLiveMatches.isEmpty && !_isLoading ? 100 : 170;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Text(
-            'Live Matches',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.black.withOpacity(0.8)),
+          child: Row(
+            children: [
+              const Icon(Icons.live_tv, color: Colors.redAccent),
+              const SizedBox(width: 8),
+              Text(
+                'Live Matches',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.black.withOpacity(0.8),
+                    fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
         ),
+        
+        // --- RESERVED SPACE CONTAINER (FIX) ---
         SizedBox(
-          height: 170, // Fixed height for the carousel
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: _allLiveMatches.length,
-            itemBuilder: (context, index) {
-              final match = _allLiveMatches[index];
-              return _buildLiveMatchCard(context, match);
-            },
-          ),
+          height: carouselHeight, 
+          child: _buildContent(context),
         ),
       ],
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    if (_allLiveMatches.isEmpty) {
+      // Show empty message when no matches are live
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.sports_soccer, size: 40, color: Colors.black.withOpacity(0.4)),
+            const SizedBox(height: 8),
+            Text(
+              'No live matches currently.',
+              style: TextStyle(color: Colors.black.withOpacity(0.6), fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: _allLiveMatches.length,
+      itemBuilder: (context, index) {
+        final match = _allLiveMatches[index];
+        return _buildLiveMatchCard(context, match);
+      },
     );
   }
 
@@ -210,7 +275,8 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
       child: Card(
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.2),
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        // FIXED: Reduced vertical margin to reduce card height and prevent overflow
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), 
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         color: Colors.white,
         child: Container(
@@ -222,18 +288,26 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('$sport • Live',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w600)),
+                  Text('$sport',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.bold)),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(20)),
-                    child: const Text('LIVE',
-                        style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10)),
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.red.shade100)
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.fiber_manual_record, size: 8, color: Colors.red),
+                        SizedBox(width: 4),
+                        Text('LIVE',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10)),
+                      ],
+                    ),
                   )
                 ],
               ),
@@ -276,7 +350,7 @@ class _LiveMatchesCarouselState extends State<LiveMatchesCarousel> {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   summary,
-                  style: TextStyle(fontSize: 12, color: Colors.teal.shade700),
+                  style: TextStyle(fontSize: 11, color: Colors.teal.shade700, fontStyle: FontStyle.italic),
                   maxLines: 1, 
                   overflow: TextOverflow.ellipsis,
                 ),

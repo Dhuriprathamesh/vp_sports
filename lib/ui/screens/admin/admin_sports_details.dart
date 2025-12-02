@@ -17,6 +17,7 @@ import '../common/live_table_tennis_score_screen.dart';
 import '../common/live_badminton_score_screen.dart';
 import '../common/live_athletics_score_screen.dart';
 import '../common/live_basketball_score_screen.dart';
+import '../common/live_dodgeball_score_screen.dart'; // Added Dodgeball
 
 // --- Data Model for Fetched Matches ---
 class FetchedMatch {
@@ -28,12 +29,12 @@ class FetchedMatch {
   final String date;
   final String time;
   final String status;
-  String scoreA; // Removed final to allow updates
-  String scoreB; // Removed final to allow updates
+  String scoreA; 
+  String scoreB; 
   final String? summary;
   final String? result;
   final String? matchFormat;
-  final String? eventCategory; // For Athletics
+  final String? eventCategory; 
 
   FetchedMatch({
     required this.id,
@@ -112,7 +113,9 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     _loadAllMatches();
   }
 
+  // --- Gender Aware Fetching ---
   Future<void> _fetchMatches(String status) async {
+    if (!mounted) return;
     setState(() {
       if (status == 'live') _isLoadingLive = true;
       if (status == 'recent') _isLoadingRecent = true;
@@ -122,8 +125,11 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
 
     try {
       final sportNameUrl = widget.sportName.toLowerCase().replaceAll(' ', '_');
+      final String genderStr = widget.isForBoys ? 'Boys' : 'Girls';
+      
+      // Added gender param to query
       final String apiUrl =
-          '${ApiConstants.baseUrl}/api/get_matches/$sportNameUrl?status=$status';
+          '${ApiConstants.baseUrl}/api/get_matches/$sportNameUrl?status=$status&gender=$genderStr';
 
       final response = await http.get(Uri.parse(apiUrl));
 
@@ -136,7 +142,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
           setState(() {
             if (status == 'live') {
                _liveMatches = fetchedMatches;
-               // Trigger detailed score fetch for live matches
+               // Only fetch detailed scores if we have matches
                if(fetchedMatches.isNotEmpty) _fetchLiveScoresForList(fetchedMatches);
             }
             if (status == 'recent') _recentMatches = fetchedMatches;
@@ -167,15 +173,17 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
     }
   }
 
-  // --- NEW: Fetch Real-Time Scores Individually ---
+  // --- FIXED: Robust Fetch Real-Time Scores Individually (Handles 404) ---
   Future<void> _fetchLiveScoresForList(List<FetchedMatch> matches) async {
     for (var match in matches) {
+      if (!mounted) return;
       try {
         String endpoint = '';
         String sport = widget.sportName;
         
-        if (sport == 'Cricket') endpoint = 'get_cricket_live_score';
+        if (sport == 'Cricket') endpoint = 'get_live_score';
         else if (sport == 'Football') endpoint = 'get_football_live_score';
+        else if (sport == 'Dodgeball') endpoint = 'get_dodgeball_live_score';
         else if (sport == 'Kabaddi') endpoint = 'get_kabaddi_live_score';
         else if (sport == 'Volleyball') endpoint = 'get_volleyball_live_score';
         else if (sport == 'Basketball') endpoint = 'get_basketball_live_score';
@@ -184,41 +192,48 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
         
         if (endpoint.isNotEmpty) {
           final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/api/$endpoint/${match.id}'));
+          
+          if (!mounted) return; 
+
+          // 1. Handle SUCCESS (200) or NO LIVE DATA (404)
           if (response.statusCode == 200) {
             final data = json.decode(response.body);
             String newScoreA = match.scoreA;
             String newScoreB = match.scoreB;
 
             if (sport == 'Cricket') {
-               newScoreA = "${data['team1_runs']}/${data['team1_wickets']}";
-               newScoreB = "${data['team2_runs']}/${data['team2_wickets']}";
-            } else if (sport == 'Football') {
-               newScoreA = "${data['team_a_goals']}";
-               newScoreB = "${data['team_b_goals']}";
+               newScoreA = "${data['team1_runs'] ?? 0}/${data['team1_wickets'] ?? 0}";
+               newScoreB = "${data['team2_runs'] ?? 0}/${data['team2_wickets'] ?? 0}";
+            } else if (sport == 'Football' || sport == 'Dodgeball') {
+               newScoreA = "${data['team_a_goals'] ?? data['team_a_score'] ?? 0}";
+               newScoreB = "${data['team_b_goals'] ?? data['team_b_score'] ?? 0}";
             } else if (sport == 'Kabaddi') {
-               newScoreA = "${data['team_a_score']}";
-               newScoreB = "${data['team_b_score']}";
+               newScoreA = "${data['team_a_score'] ?? 0}";
+               newScoreB = "${data['team_b_score'] ?? 0}";
             } else if (sport == 'Volleyball') {
-               newScoreA = "${data['team_a_sets_won']}";
-               newScoreB = "${data['team_b_sets_won']}";
+               newScoreA = "${data['team_a_sets_won'] ?? 0}";
+               newScoreB = "${data['team_b_sets_won'] ?? 0}";
             } else if (sport == 'Basketball') {
-               newScoreA = "${data['team1_score']}";
-               newScoreB = "${data['team2_score']}";
-            } else if (sport == 'Badminton' || sport == 'Table Tennis') {
-               // Usually specific point logic, simplified here to sets or 0 if parsing needed
-               // Ideally fetched via different logic, but this prevents 0-0 if API supports it
+               newScoreA = "${data['team1_score'] ?? 0}";
+               newScoreB = "${data['team2_score'] ?? 0}";
             }
-
+            
+            // Only setState if we have valid scores and are mounted
             if (mounted) {
               setState(() {
                 match.scoreA = newScoreA;
                 match.scoreB = newScoreB;
               });
             }
+          } 
+          // 2. Handle 404/Error case: Keep default scores (0/0) or already fetched summary
+          else {
+              // This is usually okay; it means the match is marked 'live' but hasn't had its first score post yet.
+              // We rely on the initial fetch to set generic 0/0 scores.
           }
         }
       } catch (e) {
-        print("Error fetching detailed score for match ${match.id}: $e");
+        debugPrint("Error fetching detailed score for match ${match.id}: $e");
       }
     }
   }
@@ -300,12 +315,15 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
         onPressed: () async {
           final bool? matchAdded = await showDialog<bool>(
             context: context,
-            builder: (context) => AddMatchScreen(sportName: widget.sportName),
+            builder: (context) => AddMatchScreen(
+              sportName: widget.sportName,
+              isForBoys: widget.isForBoys, 
+            ),
           );
 
           if (matchAdded == true) {
             await _refreshAllMatches();
-            _tabController.animateTo(2); // Go to upcoming
+            _tabController.animateTo(2); 
           }
         },
         child: const Icon(Icons.add),
@@ -401,88 +419,62 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
 
       if (sport == 'Football') {
         screen = LiveFootballScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
+        );
+      } else if (sport == 'Dodgeball') {
+        screen = LiveDodgeballScoreScreen(
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Athletics') {
          screen = LiveAthleticsScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          teamCName: match.teamC ?? 'Team C',
-          eventCategory: match.eventCategory ?? 'Race',
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          teamCName: match.teamC ?? 'Team C', eventCategory: match.eventCategory ?? 'Race',
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Kabaddi') {
         screen = LiveKabaddiScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Volleyball') {
         screen = LiveVolleyballScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
           matchFormat: match.matchFormat ?? 'Best of 3 Sets',
         );
       } else if (sport == 'Basketball') {
         screen = LiveBasketballScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Chess') {
         screen = LiveChessScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Carrom') {
         screen = LiveCarromScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Table Tennis') {
         screen = LiveTableTennisScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else if (sport == 'Badminton') {
         screen = LiveBadmintonScoreScreen(
-          matchId: match.id,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isAdmin: true,
-          isForBoys: widget.isForBoys,
+          matchId: match.id, teamAName: match.teamA, teamBName: match.teamB,
+          isAdmin: true, isForBoys: widget.isForBoys,
         );
       } else {
         // Default to Cricket
         screen = LiveCricketScoreScreen(
-          matchId: match.id,
-          sportName: widget.sportName,
-          teamAName: match.teamA,
-          teamBName: match.teamB,
-          isForBoys: widget.isForBoys,
-          onGenderToggle: widget.onGenderToggle,
+          matchId: match.id, sportName: widget.sportName,
+          teamAName: match.teamA, teamBName: match.teamB,
+          isForBoys: widget.isForBoys, onGenderToggle: widget.onGenderToggle,
           isAdmin: true,
         );
       }
@@ -550,8 +542,7 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
         );
     }
 
-    bool hideScores = widget.sportName == 'Carrom' ||
-        widget.sportName == 'Chess';
+    bool hideScores = widget.sportName == 'Carrom' || widget.sportName == 'Chess';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,7 +594,6 @@ class _AdminSportsDetailsScreenState extends State<AdminSportsDetailsScreen>
   }
 
   Widget _buildUpcomingMatchContent(BuildContext context, FetchedMatch match) {
-    // ... (This part remains unchanged from previous versions) ...
     if (widget.sportName == 'Athletics') {
          return Row(
           crossAxisAlignment: CrossAxisAlignment.center,

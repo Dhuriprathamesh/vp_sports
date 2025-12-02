@@ -10,11 +10,14 @@ import io
 import csv
 import requests
 
-# --- REPORTLAB IMPORTS ---
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
+# --- REPORTLAB IMPORTS (For PDF Generation - Optional) ---
+try:
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+except ImportError:
+    print("ReportLab not installed. PDF generation will be disabled.")
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, o):
@@ -54,6 +57,78 @@ def parse_json_col(val):
     except: return []
 
 # ==============================================================================
+#                       DATABASE SCHEMA AUTOMATION
+# ==============================================================================
+def update_db_schema():
+    """Ensures tables exist with gender and sport-specific columns."""
+    conn = get_db_connection()
+    if not conn:
+        print("Skipping schema update: DB connection failed")
+        return
+    
+    cursor = conn.cursor()
+    try:
+        print("Checking database schema...")
+        
+        # 1. Update Team Tables (team_co, team_if, team_ej)
+        team_tables = ['team_co', 'team_if', 'team_ej']
+        
+        # Columns to ensure exist
+        required_cols = [
+            ("gender", "ENUM('Boys', 'Girls') DEFAULT 'Boys'"),
+            ("dodgeball_player", "VARCHAR(255)"),
+            ("cricket_player", "VARCHAR(255)"),
+            ("football_player", "VARCHAR(255)"),
+            ("basketball_player", "VARCHAR(255)"),
+            ("kabaddi_player", "VARCHAR(255)"),
+            ("volleyball_player", "VARCHAR(255)"),
+            ("athletics_player", "VARCHAR(255)"),
+            ("chess_player", "VARCHAR(255)"),
+            ("carrom_player", "VARCHAR(255)"),
+            ("table_tennis_player", "VARCHAR(255)"),
+            ("badminton_player", "VARCHAR(255)"),
+        ]
+
+        for table in team_tables:
+            # Check existing columns
+            cursor.execute(f"SHOW COLUMNS FROM {table}")
+            existing_cols = [row[0] for row in cursor.fetchall()]
+            
+            for col_name, col_def in required_cols:
+                if col_name not in existing_cols:
+                    print(f"Adding {col_name} to {table}...")
+                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+
+        # 2. Update Match Tables to have 'gender'
+        match_tables = [
+            'cricket_match', 'football_match', 'basketball_matches', 
+            'kabaddi_match', 'volleyball_match', 'athletics_match', 
+            'chess_match', 'carrom_matches', 'table_tennis_match', 
+            'badminton_match', 'dodgeball_match'
+        ]
+        
+        for table in match_tables:
+            try:
+                cursor.execute(f"SHOW TABLES LIKE '{table}'")
+                if cursor.fetchone():
+                    cursor.execute(f"SHOW COLUMNS FROM {table}")
+                    cols = [row[0] for row in cursor.fetchall()]
+                    if 'gender' not in cols:
+                        print(f"Adding gender to {table}...")
+                        cursor.execute(f"ALTER TABLE {table} ADD COLUMN gender ENUM('Boys', 'Girls') DEFAULT 'Boys'")
+            except Exception as ex:
+                print(f"Skipping table {table} (might not exist yet): {ex}")
+
+        conn.commit()
+        print("Database schema verified.")
+        
+    except Exception as e:
+        print(f"Schema update failed: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==============================================================================
 #                          HELPER: SPORT NAME TO DB COLUMN
 # ==============================================================================
 def get_column_for_sport(sport_name):
@@ -70,129 +145,36 @@ def get_column_for_sport(sport_name):
     if 'carrom' in s: return 'carrom_player'
     if 'table' in s or 'tennis' in s: return 'table_tennis_player'
     if 'badminton' in s: return 'badminton_player'
+    if 'dodgeball' in s: return 'dodgeball_player'
     return None
-
-# ==============================================================================
-#                       DATABASE SCHEMA AUTOMATION
-# ==============================================================================
-def update_db_schema():
-    """Ensures tables exist with sport-specific columns."""
-    conn = get_db_connection()
-    if not conn:
-        print("Skipping schema update: DB connection failed")
-        return
-    
-    cursor = conn.cursor()
-    try:
-        print("Checking database schema...")
-        
-        # 1. Define required columns for team tables
-        sport_cols = [
-            "cricket_player VARCHAR(255)",
-            "football_player VARCHAR(255)",
-            "basketball_player VARCHAR(255)",
-            "kabaddi_player VARCHAR(255)",
-            "volleyball_player VARCHAR(255)",
-            "athletics_player VARCHAR(255)",
-            "chess_player VARCHAR(255)",
-            "carrom_player VARCHAR(255)",
-            "table_tennis_player VARCHAR(255)",
-            "badminton_player VARCHAR(255)"
-        ]
-        
-        team_tables = ['team_co', 'team_if', 'team_ej']
-        
-        for table in team_tables:
-            # Create basic table if not exists
-            cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {table} (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    player_name VARCHAR(255),
-                    sport_name VARCHAR(100),
-                    sport_category VARCHAR(50),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Add sport-specific columns if they don't exist
-            cursor.execute(f"SHOW COLUMNS FROM {table}")
-            existing_cols = [row[0] for row in cursor.fetchall()]
-            
-            for col_def in sport_cols:
-                col_name = col_def.split()[0]
-                if col_name not in existing_cols:
-                    print(f"Adding {col_name} to {table}...")
-                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
-
-        # 2. Update Livescore tables (Ensure essential cols exist)
-        cursor.execute("SHOW TABLES LIKE 'football_match_livescore'")
-        if cursor.fetchone():
-            cursor.execute("SHOW COLUMNS FROM football_match_livescore")
-            cols = [r[0] for r in cursor.fetchall()]
-            if 'accumulated_seconds' not in cols:
-                cursor.execute("ALTER TABLE football_match_livescore ADD COLUMN accumulated_seconds INT DEFAULT 0")
-            if 'last_resume_time' not in cols:
-                cursor.execute("ALTER TABLE football_match_livescore ADD COLUMN last_resume_time DATETIME")
-        
-        # 3. Update Basketball Livescore tables
-        cursor.execute("SHOW TABLES LIKE 'basketball_match_livescore'")
-        if cursor.fetchone():
-            cursor.execute("SHOW COLUMNS FROM basketball_match_livescore")
-            cols = [r[0] for r in cursor.fetchall()]
-            required_cols = [
-                ("team1_q1_score", "INT DEFAULT 0"), ("team2_q1_score", "INT DEFAULT 0"),
-                ("team1_q2_score", "INT DEFAULT 0"), ("team2_q2_score", "INT DEFAULT 0"),
-                ("team1_q3_score", "INT DEFAULT 0"), ("team2_q3_score", "INT DEFAULT 0"),
-                ("team1_q4_score", "INT DEFAULT 0"), ("team2_q4_score", "INT DEFAULT 0"),
-                ("team1_ot_score", "INT DEFAULT 0"), ("team2_ot_score", "INT DEFAULT 0"),
-                ("team1_fouls", "INT DEFAULT 0"), ("team2_fouls", "INT DEFAULT 0"),
-                ("team1_timeouts", "INT DEFAULT 0"), ("team2_timeouts", "INT DEFAULT 0"),
-                ("current_quarter", "INT DEFAULT 1")
-            ]
-            for col_name, col_def in required_cols:
-                if col_name not in cols:
-                    cursor.execute(f"ALTER TABLE basketball_match_livescore ADD COLUMN {col_name} {col_def}")
-
-        # 4. Update Cricket Livescore tables (Ensure essential cols exist)
-        cursor.execute("SHOW TABLES LIKE 'cricket_match_livescore'")
-        if cursor.fetchone():
-            cursor.execute("SHOW COLUMNS FROM cricket_match_livescore")
-            cols = [r[0] for r in cursor.fetchall()]
-            cricket_cols = [
-                ("team1_runs", "INT DEFAULT 0"), ("team2_runs", "INT DEFAULT 0"),
-                ("team1_wickets", "INT DEFAULT 0"), ("team2_wickets", "INT DEFAULT 0")
-            ]
-            for col_name, col_def in cricket_cols:
-                if col_name not in cols:
-                    cursor.execute(f"ALTER TABLE cricket_match_livescore ADD COLUMN {col_name} {col_def}")
-
-        conn.commit()
-        print("Database schema verified.")
-        
-    except Exception as e:
-        print(f"Schema update failed: {e}")
-    finally:
-        cursor.close()
-        conn.close()
 
 # ==============================================================================
 #                                PLAYER DATA SYNC
 # ==============================================================================
 
-CSV_URLS = {
+CSV_URLS_BOYS = {
     'CO': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR44hh2_ate6gON95q4-BTzdebfZM2k6Sg-SYD9pq3wY_fbbOQr_RiRkJ1NRjGynCD73RJ282KT2dCx/pub?gid=658788574&single=true&output=csv',
     'IF': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT9N7lwCdwLXcvSoe6Btz5qwbAcOctrzub4auqQpQi2OKow2OXWWaBbeIjJeXEx68PDzKwbDxk2TNbo/pub?gid=1584125774&single=true&output=csv',
     'EJ': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTgsDpVd4hnaukYXXg5I3PaBrFZCEX3B8UwSWsS6eviglIS0zcGJyFyjF6oPgGq4adUE-wzR4FzSgel/pub?gid=2018174338&single=true&output=csv'
 }
 
+CSV_URLS_GIRLS = {
+    'CO': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSXlSQJ_qlfkCO16xsdNFGdRLA4zDqWyM3nBP2EQ5JS7nbPapRSHxh2k4jatvzV6izL7qqOL6v64Ume/pub?gid=975501789&single=true&output=csv',
+    'IF': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRHX_IR9PivkEMskqwn7ary29wvO08KXIRqZV3wrFczjiFdS2OzNZdIfdruT9CYueSkadrna_KMsOx0/pub?gid=1363664865&single=true&output=csv',
+    'EJ': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSKnPXauzAdM2DvdvMRel-gVWPi6Du1TWdbjKAzkrY4MHhqvN1OZMZE_64nioBHDXlmvXXkgh5htndr/pub?gid=466749134&single=true&output=csv'
+}
+
 @app.route('/api/sync_players', methods=['GET'])
 def sync_players():
     target_sport = request.args.get('sport') 
-    print(f"Starting sync for sport: {target_sport if target_sport else 'ALL'}")
+    gender = request.args.get('gender', 'Boys') 
+    
+    print(f"Starting sync for sport: {target_sport if target_sport else 'ALL'} | Gender: {gender}")
     
     conn = get_db_connection()
-    if not conn: return jsonify({"status": "error", "message": "DB Fail"}), 500
+    if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
     
+    cur = None
     try:
         cur = conn.cursor()
         total_added = 0
@@ -203,23 +185,35 @@ def sync_players():
             if not target_col_name:
                  return jsonify({"status": "error", "message": f"Unknown sport: {target_sport}"}), 400
 
-        for team_name, url in CSV_URLS.items():
+        # Select correct CSVs
+        current_csv_urls = CSV_URLS_GIRLS if gender == 'Girls' else CSV_URLS_BOYS
+
+        for team_name, url in current_csv_urls.items():
             table_name = f"team_{team_name.lower()}" 
             
+            # Deletion: Ensure we only delete matching Gender
             if target_sport:
-                cur.execute(f"DELETE FROM {table_name} WHERE {target_col_name} IS NOT NULL")
+                # Delete existing players for this sport column AND gender
+                cur.execute(f"DELETE FROM {table_name} WHERE {target_col_name} IS NOT NULL AND gender = %s", (gender,))
             else:
-                cur.execute(f"TRUNCATE TABLE {table_name}")
+                # Delete ALL existing players for this gender (less common, but safe)
+                cur.execute(f"DELETE FROM {table_name} WHERE gender = %s", (gender,))
             
             try:
                 response = requests.get(url)
-                if response.status_code != 200: continue
-            except: continue
+                if response.status_code != 200: 
+                    print(f"Failed to fetch CSV for {team_name}: {response.status_code}")
+                    continue
+            except Exception as e:
+                print(f"Network error fetching CSV for {team_name}: {e}")
+                continue
 
             stream = io.StringIO(response.content.decode('utf-8'))
             csv_reader = csv.reader(stream)
-            try: header = next(csv_reader) 
-            except: continue 
+            try: 
+                header = next(csv_reader) 
+            except: 
+                continue 
             
             sport_indices = [i for i, h in enumerate(header) if 'Select the Sport' in h or 'Sport' in h]
             player_start_index = sport_indices[-1] + 1 if sport_indices else 4
@@ -227,10 +221,12 @@ def sync_players():
             for row in csv_reader:
                 if len(row) < 5: continue 
                 row_sport = ""
+                # Heuristic to find sport name in row
                 if len(row) > 2 and row[2].strip(): row_sport = row[2].strip()
                 if not row_sport and len(row) > 3 and row[3].strip(): row_sport = row[3].strip()
                 if not row_sport: continue 
 
+                # Filter Logic
                 if target_sport and target_sport.lower() not in row_sport.lower(): continue
 
                 current_row_col = get_column_for_sport(row_sport)
@@ -240,15 +236,24 @@ def sync_players():
                     if i >= len(row): break
                     p_name = row[i].strip()
                     if p_name and "player" not in p_name.lower(): 
-                        category_val = row[1] if len(row) > 1 else ""
-                        cur.execute(f"INSERT INTO {table_name} ({current_row_col}, sport_name, sport_category) VALUES (%s, %s, %s)", (p_name, row_sport, category_val))
+                        # FINAL FIXED INSERT: Only insert into the player column and gender column
+                        sql = f"INSERT INTO {table_name} ({current_row_col}, gender) VALUES (%s, %s)"
+                        cur.execute(sql, (p_name, gender))
                         total_added += 1
                             
         conn.commit()
-        return jsonify({"status": "success", "message": f"Synced {total_added} players."}), 200
+        print(f"Sync complete. Added {total_added} players.")
+        return jsonify({"status": "success", "message": f"Synced {total_added} {gender} players."}), 200
         
+    except mysql.connector.Error as err:
+        print(f"MySQL Error: {err}")
+        # Rollback in case of error
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": f"Database Error: {err}"}), 500
     except Exception as e:
         traceback.print_exc()
+        # Rollback in case of unexpected error
+        if conn: conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if cur: cur.close()
@@ -258,6 +263,8 @@ def sync_players():
 def get_players_by_team():
     team = request.args.get('team') 
     sport = request.args.get('sport')
+    gender = request.args.get('gender', 'Boys')
+
     if not team or not sport: return jsonify([]), 400
     table_name = f"team_{team.lower()}" 
     target_col = get_column_for_sport(sport)
@@ -268,10 +275,13 @@ def get_players_by_team():
     try:
         cur = conn.cursor()
         if team.lower() not in ['co', 'if', 'ej']: return jsonify([]), 400
-        cur.execute(f"SELECT {target_col} FROM {table_name} WHERE {target_col} IS NOT NULL AND {target_col} != '' ORDER BY {target_col} ASC")
+        # Filter by gender
+        cur.execute(f"SELECT {target_col} FROM {table_name} WHERE {target_col} IS NOT NULL AND {target_col} != '' AND gender = %s ORDER BY {target_col} ASC", (gender,))
         players = cur.fetchall()
         return jsonify([p[0] for p in players]), 200
-    except: return jsonify([]), 500
+    except Exception as e:
+        print(f"Error fetching players: {e}")
+        return jsonify([]), 500
     finally:
         if cur: cur.close()
         if conn: conn.close()
@@ -287,8 +297,8 @@ def add_cricket_match():
     if not conn: return jsonify({"status": "error"}), 500
     cur = conn.cursor()
     try:
-        vals = (data['team_a_name'], data['team_b_name'], json.dumps(data.get('team_a_players', [])), json.dumps(data.get('team_b_players', [])), int(data.get('overs', 20)), data['start_time'], data['venue'], json.dumps(data.get('umpires', [])))
-        cur.execute("INSERT INTO cricket_match (team_a_name, team_b_name, team_a_players, team_b_players, overs_per_innings, start_time, venue, umpires, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", vals)
+        vals = (data['team_a_name'], data['team_b_name'], json.dumps(data.get('team_a_players', [])), json.dumps(data.get('team_b_players', [])), int(data.get('overs', 20)), data['start_time'], data['venue'], json.dumps(data.get('umpires', [])), data.get('gender', 'Boys'))
+        cur.execute("INSERT INTO cricket_match (team_a_name, team_b_name, team_a_players, team_b_players, overs_per_innings, start_time, venue, umpires, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", vals)
         new_id = cur.lastrowid
         cur.execute("INSERT INTO cricket_match_livescore (match_id, team1_name, team2_name, current_status, summary_text) VALUES (%s, %s, %s, 'upcoming', 'Match not started')", (new_id, data['team_a_name'], data['team_b_name']))
         conn.commit()
@@ -296,8 +306,6 @@ def add_cricket_match():
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
     finally: conn.close()
 
-# --- FIXED: Added route alias to support both old and new Flutter code ---
-@app.route('/api/update_cricket_live_score/<int:match_id>', methods=['POST'])
 @app.route('/api/update_live_score/<int:match_id>', methods=['POST'])
 def update_cricket_live_score(match_id):
     data = request.get_json()
@@ -343,8 +351,6 @@ def update_cricket_live_score(match_id):
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
     finally: conn.close()
 
-# --- FIXED: Added route alias to support both old and new Flutter code ---
-@app.route('/api/get_cricket_live_score/<int:match_id>', methods=['GET'])
 @app.route('/api/get_live_score/<int:match_id>', methods=['GET'])
 def get_cricket_live_score(match_id):
     conn = get_db_connection()
@@ -376,6 +382,7 @@ def get_cricket_live_score(match_id):
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
     finally: conn.close()
 
+# --- FOOTBALL ---
 @app.route('/api/add_football_match', methods=['POST'])
 def add_football_match():
     data = request.get_json()
@@ -383,8 +390,8 @@ def add_football_match():
     if not conn: return jsonify({"status": "error"}), 500
     cur = conn.cursor()
     try:
-        vals = (data['team_a_name'], data['team_b_name'], json.dumps(data.get('team_a_players', [])), json.dumps(data.get('team_b_players', [])), int(data.get('match_duration', 90)), data['start_time'], data['venue'], json.dumps(data.get('referees', [])))
-        cur.execute("INSERT INTO football_match (team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, referees, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", vals)
+        vals = (data['team_a_name'], data['team_b_name'], json.dumps(data.get('team_a_players', [])), json.dumps(data.get('team_b_players', [])), int(data.get('match_duration', 90)), data['start_time'], data['venue'], json.dumps(data.get('referees', [])), data.get('gender', 'Boys'))
+        cur.execute("INSERT INTO football_match (team_a_name, team_b_name, team_a_players, team_b_players, match_duration, start_time, venue, referees, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", vals)
         new_id = cur.lastrowid
         cur.execute("INSERT INTO football_match_livescore (match_id, team_a_goals, team_b_goals, match_time, current_half, match_status) VALUES (%s, 0, 0, '00:00', '1st Half', 'upcoming')", (new_id,))
         conn.commit()
@@ -441,6 +448,54 @@ def update_football_score(match_id):
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
     finally: conn.close()
 
+# --- DODGEBALL ---
+@app.route('/api/add_dodgeball_match', methods=['POST'])
+def add_dodgeball_match():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    cur = conn.cursor()
+    try:
+        vals = (data['team_a_name'], data['team_b_name'], json.dumps(data.get('team_a_players', [])), json.dumps(data.get('team_b_players', [])), 
+                data['start_time'], data['venue'], json.dumps(data.get('officials', [])), data.get('gender', 'Girls'))
+        cur.execute("INSERT INTO dodgeball_match (team_a_name, team_b_name, team_a_players, team_b_players, start_time, venue, officials, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", vals)
+        new_id = cur.lastrowid
+        cur.execute("INSERT INTO dodgeball_match_livescore (match_id, team_a_score, team_b_score, match_status) VALUES (%s, 0, 0, 'upcoming')", (new_id,))
+        conn.commit()
+        return jsonify({"status": "success", "match_id": new_id}), 201
+    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+    finally: conn.close()
+
+@app.route('/api/get_dodgeball_live_score/<int:match_id>', methods=['GET'])
+def get_dodgeball_live_score(match_id):
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT ls.*, dm.team_a_name, dm.team_b_name, dm.match_status as main_status FROM dodgeball_match_livescore ls JOIN dodgeball_match dm ON ls.match_id = dm.match_id WHERE ls.match_id = %s", (match_id,))
+        row = cur.fetchone()
+        if not row: return jsonify({"status": "error"}), 404
+        return jsonify(row), 200
+    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+    finally: conn.close()
+
+@app.route('/api/update_dodgeball_score/<int:match_id>', methods=['POST'])
+def update_dodgeball_score(match_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    cur = conn.cursor()
+    try:
+        vals = (data.get('team_a_score'), data.get('team_b_score'), data.get('status'), match_id)
+        cur.execute("UPDATE dodgeball_match_livescore SET team_a_score=%s, team_b_score=%s, match_status=%s, last_updated=NOW() WHERE match_id=%s", vals)
+        if data.get('status') == 'finished':
+             cur.execute("UPDATE dodgeball_match SET match_status = 'finished' WHERE match_id = %s", (match_id,))
+        conn.commit()
+        return jsonify({"status": "success"}), 200
+    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+    finally: conn.close()
+
+# --- OTHER SPORTS ---
 @app.route('/api/add_basketball_match', methods=['POST'])
 def add_basketball_match():
     data = request.get_json()
@@ -451,8 +506,8 @@ def add_basketball_match():
         t1_p = (data.get('team_a_players', []) + [''] * 15)[:15]
         t2_p = (data.get('team_b_players', []) + [''] * 15)[:15]
         umpires = ", ".join(data.get('umpires', []))
-        sql = "INSERT INTO basketball_matches (team_1_name, team_2_name, start_time, venue, total_quarters, category, match_status, umpires, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team1_player6, team1_player7, team1_player8, team1_player9, team1_player10, team1_sub1, team1_sub2, team1_sub3, team1_sub4, team1_sub5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, team2_player6, team2_player7, team2_player8, team2_player9, team2_player10, team2_sub1, team2_sub2, team2_sub3, team2_sub4, team2_sub5) VALUES (%s, %s, %s, %s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        vals = [data['team_a_name'], data['team_b_name'], data['start_time'], data['venue'], data.get('total_quarters', 4), data.get('category', 'full_game'), umpires] + t1_p + t2_p
+        vals = [data['team_a_name'], data['team_b_name'], data['start_time'], data['venue'], data.get('total_quarters', 4), data.get('category', 'full_game'), umpires, data.get('gender', 'Boys')] + t1_p + t2_p
+        sql = "INSERT INTO basketball_matches (team_1_name, team_2_name, start_time, venue, total_quarters, category, match_status, umpires, gender, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team1_player6, team1_player7, team1_player8, team1_player9, team1_player10, team1_sub1, team1_sub2, team1_sub3, team1_sub4, team1_sub5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, team2_player6, team2_player7, team2_player8, team2_player9, team2_player10, team2_sub1, team2_sub2, team2_sub3, team2_sub4, team2_sub5) VALUES (%s, %s, %s, %s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         cur.execute(sql, tuple(vals))
         new_id = cur.lastrowid
         cur.execute("INSERT INTO basketball_match_livescore (match_id, current_quarter, match_status) VALUES (%s, 1, 'not_started')", (new_id,))
@@ -474,8 +529,8 @@ def get_basketball_live_score(match_id):
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
     finally: conn.close()
 
-@app.route('/api/update_basketball_score/<int:match_id>', methods=['POST'])
-def update_basketball_score(match_id):
+@app.route('/api/update_basketball_match_score/<int:match_id>', methods=['POST'])
+def update_basketball_match_score(match_id):
     data = request.get_json()
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error"}), 500
@@ -502,7 +557,7 @@ def add_athletics_match():
         t2 = json.dumps(data.get('team_b_players', []))
         t3 = json.dumps(data.get('team_c_players', []))
         officials = json.dumps(data.get('officials', []))
-        cur.execute("INSERT INTO athletics_match (team_a_name, team_b_name, team_c_name, team_a_players, team_b_players, team_c_players, start_time, venue, officials, event_category, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], data.get('team_c_name', 'Team C'), t1, t2, t3, data['start_time'], data['venue'], officials, data.get('event_category', 'Race')))
+        cur.execute("INSERT INTO athletics_match (team_a_name, team_b_name, team_c_name, team_a_players, team_b_players, team_c_players, start_time, venue, officials, event_category, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], data.get('team_c_name', 'Team C'), t1, t2, t3, data['start_time'], data['venue'], officials, data.get('event_category', 'Race'), data.get('gender', 'Boys')))
         new_id = cur.lastrowid
         cur.execute("INSERT INTO athletics_match_livescore (match_id, game_status_text) VALUES (%s, 'Race Not Started')", (new_id,))
         conn.commit()
@@ -554,8 +609,8 @@ def add_badminton_match():
         umpires = json.dumps(data.get('umpires', []))
         total_sets = data.get('total_sets', 3)
         category = data.get('category', 'singles')
-        sql = "INSERT INTO badminton_match (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, total_sets, category, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
-        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, total_sets, category)
+        sql = "INSERT INTO badminton_match (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, total_sets, category, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
+        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, total_sets, category, data.get('gender', 'Boys'))
         cur.execute(sql, vals)
         new_id = cur.lastrowid
         cur.execute("INSERT INTO badminton_match_livescore (match_id, current_set, match_status) VALUES (%s, 1, 'Match not started')", (new_id,))
@@ -623,8 +678,8 @@ def add_table_tennis_match():
         category = data.get('category', 'singles')
         pA = data.get('player_a_selected', 'Player A')
         pB = data.get('player_b_selected', 'Player B')
-        sql = "INSERT INTO table_tennis_match (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, total_sets, category, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
-        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, total_sets, category)
+        sql = "INSERT INTO table_tennis_match (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, total_sets, category, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
+        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, total_sets, category, data.get('gender', 'Boys'))
         cur.execute(sql, vals)
         new_id = cur.lastrowid
         status_text = f"Selected: {pA} vs {pB}"
@@ -687,8 +742,8 @@ def add_chess_match():
         t1_players = (t1_players if isinstance(t1_players, list) else []) + [''] * 5
         t2_players = (t2_players if isinstance(t2_players, list) else []) + [''] * 5
         umpires = json.dumps(data.get('umpires', []))
-        sql = "INSERT INTO chess_match (team_a_name, team_b_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
-        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires)
+        sql = "INSERT INTO chess_match (team_a_name, team_b_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
+        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, data.get('gender', 'Boys'))
         cur.execute(sql, vals)
         new_id = cur.lastrowid
         cur.execute("INSERT INTO chess_match_livescore (match_id, game_status_text, winner) VALUES (%s, 'Match Not Started', NULL)", (new_id,))
@@ -747,8 +802,8 @@ def add_carrom_match():
         t1_players = (t1_players if isinstance(t1_players, list) else []) + [''] * 5
         t2_players = (t2_players if isinstance(t2_players, list) else []) + [''] * 5
         umpires = json.dumps(data.get('umpires', []))
-        sql = "INSERT INTO carrom_matches (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
-        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires)
+        sql = "INSERT INTO carrom_matches (team_1_name, team_2_name, team1_player1, team1_player2, team1_player3, team1_player4, team1_player5, team2_player1, team2_player2, team2_player3, team2_player4, team2_player5, start_time, venue, umpires, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')"
+        vals = (data['team_a_name'], data['team_b_name'], t1_players[0], t1_players[1], t1_players[2], t1_players[3], t1_players[4], t2_players[0], t2_players[1], t2_players[2], t2_players[3], t2_players[4], data['start_time'], data['venue'], umpires, data.get('gender', 'Boys'))
         cur.execute(sql, vals)
         new_id = cur.lastrowid
         cur.execute("INSERT INTO carrom_match_livescore (match_id, game_status_text, winner) VALUES (%s, 'Match Not Started', NULL)", (new_id,))
@@ -806,7 +861,7 @@ def add_volleyball_match():
         team_a_players = json.dumps(data.get('team_a_players', []))
         team_b_players = json.dumps(data.get('team_b_players', []))
         officials = json.dumps(data.get('officials', []))
-        cur.execute("INSERT INTO volleyball_match (team_a_name, team_b_name, team_a_players, team_b_players, venue, start_time, match_format, officials, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], team_a_players, team_b_players, data['venue'], data['start_time'], data.get('match_format', 'Best of 3 Sets'), officials))
+        cur.execute("INSERT INTO volleyball_match (team_a_name, team_b_name, team_a_players, team_b_players, venue, start_time, match_format, officials, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], team_a_players, team_b_players, data['venue'], data['start_time'], data.get('match_format', 'Best of 3 Sets'), officials, data.get('gender', 'Boys')))
         new_id = cur.lastrowid
         cur.execute("INSERT INTO volleyball_match_livescore (match_id, current_set, team_a_sets_won, team_b_sets_won, team_a_current_points, team_b_current_points, set_scores) VALUES (%s, 1, 0, 0, 0, 0, '{}')", (new_id,))
         conn.commit()
@@ -865,7 +920,7 @@ def add_kabaddi_match():
         team_a_players = json.dumps(data.get('team_a_players', []))
         team_b_players = json.dumps(data.get('team_b_players', []))
         officials = json.dumps(data.get('officials', []))
-        cur.execute("INSERT INTO kabaddi_match (team_a_name, team_b_name, team_a_players, team_b_players, venue, start_time, match_duration, officials, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], team_a_players, team_b_players, data['venue'], data['start_time'], int(data.get('match_duration', 40)), officials))
+        cur.execute("INSERT INTO kabaddi_match (team_a_name, team_b_name, team_a_players, team_b_players, venue, start_time, match_duration, officials, gender, match_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'upcoming')", (data['team_a_name'], data['team_b_name'], team_a_players, team_b_players, data['venue'], data['start_time'], int(data.get('match_duration', 40)), officials, data.get('gender', 'Boys')))
         new_id = cur.lastrowid
         cur.execute("INSERT INTO kabaddi_match_livescore (match_id, team_a_score, team_b_score, match_time, current_half) VALUES (%s, 0, 0, '00:00', '1st Half')", (new_id,))
         conn.commit()
@@ -1056,6 +1111,21 @@ def get_match_details(match_id):
                     "match_status": row['match_status'],
                     "info": { "Umpires": row.get('umpires') }
                 }
+        
+        # --- 8. DODGEBALL ---
+        elif sport == 'dodgeball':
+            cur.execute("SELECT * FROM dodgeball_match WHERE match_id = %s", (match_id,))
+            row = cur.fetchone()
+            if row:
+                data = {
+                    "id": row['match_id'], "sport": "Dodgeball",
+                    "team_a_name": row['team_a_name'], "team_b_name": row['team_b_name'],
+                    "team_a_players": parse_json_col(row['team_a_players']),
+                    "team_b_players": parse_json_col(row['team_b_players']),
+                    "date": row['start_time'].isoformat(), "venue": row['venue'],
+                    "match_status": row['match_status'],
+                    "info": { "Officials": parse_json_col(row['officials']) }
+                }
 
         if data:
             return jsonify(data), 200
@@ -1087,7 +1157,8 @@ def start_match(match_id):
             'badminton': 'badminton_match',
             'table tennis': 'table_tennis_match',
             'chess': 'chess_match',
-            'carrom': 'carrom_matches'
+            'carrom': 'carrom_matches',
+            'dodgeball': 'dodgeball_match'
         }
         
         table = table_map.get(sport)
@@ -1107,6 +1178,8 @@ def start_match(match_id):
 @app.route('/api/get_matches/<sport_name>', methods=['GET'])
 def get_matches(sport_name):
     status_param = request.args.get('status', 'upcoming')
+    gender = request.args.get('gender', 'Boys')
+    
     conn = get_db_connection()
     if not conn: return jsonify([])
     cur = conn.cursor()
@@ -1136,7 +1209,7 @@ def get_matches(sport_name):
                         ls.team1_runs, ls.team1_wickets, ls.team2_runs, ls.team2_wickets
                         FROM cricket_match cm
                         LEFT JOIN cricket_match_livescore ls ON cm.match_id = ls.match_id
-                        WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}""", (db_status,))
+                        WHERE cm.match_status = %s AND cm.gender = %s ORDER BY cm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for r in rows: 
                 s1 = f"{r[6]}/{r[7]}" if r[6] is not None else "0/0"
@@ -1148,7 +1221,7 @@ def get_matches(sport_name):
                          ls.team_a_goals, ls.team_b_goals 
                          FROM football_match fm 
                          LEFT JOIN football_match_livescore ls ON fm.match_id = ls.match_id
-                         WHERE fm.match_status = %s ORDER BY fm.start_time {sort_order}""", (db_status,))
+                         WHERE fm.match_status = %s AND fm.gender = %s ORDER BY fm.start_time {sort_order}""", (db_status, gender))
              rows = cur.fetchall()
              for r in rows: 
                  s1 = str(r[6]) if r[6] is not None else "0"
@@ -1158,7 +1231,7 @@ def get_matches(sport_name):
         elif sport == 'kabaddi':
             cur.execute(f"""SELECT km.match_id, km.team_a_name, km.team_b_name, km.venue, km.start_time, km.match_status,
                        kls.team_a_score, kls.team_b_score FROM kabaddi_match km LEFT JOIN kabaddi_match_livescore kls ON km.match_id = kls.match_id
-                WHERE km.match_status = %s ORDER BY km.start_time {sort_order}""", (db_status,))
+                WHERE km.match_status = %s AND km.gender = %s ORDER BY km.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows:
                 score_a = row[6] or 0
@@ -1177,7 +1250,7 @@ def get_matches(sport_name):
                             ls.team1_score, ls.team2_score, ls.current_quarter
                      FROM basketball_matches bm 
                      LEFT JOIN basketball_match_livescore ls ON bm.match_id = ls.match_id
-                     WHERE bm.match_status = %s ORDER BY bm.start_time {sort_order}""", (db_status,))
+                     WHERE bm.match_status = %s AND bm.gender = %s ORDER BY bm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows:
                 t1s = row[6] or 0; t2s = row[7] or 0; cq = row[8] or 1
@@ -1192,7 +1265,7 @@ def get_matches(sport_name):
             cur.execute(f"""SELECT am.match_id, am.team_a_name, am.team_b_name, am.team_c_name, am.venue, am.start_time, am.match_status, am.event_category,
                        ls.winner, ls.game_status_text 
                 FROM athletics_match am LEFT JOIN athletics_match_livescore ls ON am.match_id = ls.match_id
-                WHERE am.match_status = %s ORDER BY am.start_time {sort_order}""", (db_status,))
+                WHERE am.match_status = %s AND am.gender = %s ORDER BY am.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows:
                 summary = f"{row[7]}"
@@ -1205,7 +1278,7 @@ def get_matches(sport_name):
         elif sport == 'volleyball':
             cur.execute(f"""SELECT vm.match_id, vm.team_a_name, vm.team_b_name, vm.venue, vm.start_time, vm.match_status,
                        vls.team_a_sets_won, vls.team_b_sets_won FROM volleyball_match vm LEFT JOIN volleyball_match_livescore vls ON vm.match_id = vls.match_id
-                WHERE vm.match_status = %s ORDER BY vm.start_time {sort_order}""", (db_status,))
+                WHERE vm.match_status = %s AND vm.gender = %s ORDER BY vm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows:
                 matches.append({
@@ -1221,7 +1294,7 @@ def get_matches(sport_name):
                         ls.current_set
                         FROM badminton_match cm 
                         LEFT JOIN badminton_match_livescore ls ON cm.match_id = ls.match_id
-                        WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}""", (db_status,))
+                        WHERE cm.match_status = %s AND cm.gender = %s ORDER BY cm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for r in rows:
                 # Calculate basic sum for preview, or just show set wins. Showing points for now.
@@ -1238,7 +1311,7 @@ def get_matches(sport_name):
                          ls.team1_set1_points, ls.team2_set1_points 
                          FROM table_tennis_match cm 
                          LEFT JOIN table_tennis_livescore ls ON cm.match_id = ls.match_id
-                         WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}""", (db_status,))
+                         WHERE cm.match_status = %s AND cm.gender = %s ORDER BY cm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for r in rows: 
                 sA = r[6] or 0; sB = r[7] or 0
@@ -1249,7 +1322,7 @@ def get_matches(sport_name):
                         ls.game_status_text
                         FROM carrom_matches cm 
                         LEFT JOIN carrom_match_livescore ls ON cm.match_id = ls.match_id
-                        WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}""", (db_status,))
+                        WHERE cm.match_status = %s AND cm.gender = %s ORDER BY cm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows: matches.append({"id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], "date": fmt_date(row[4]), "time": fmt_time(row[4]), "status": row[5], "scoreA": "", "scoreB": "", "summary": row[6] or "Live"})
 
@@ -1258,9 +1331,22 @@ def get_matches(sport_name):
                         ls.game_status_text
                         FROM chess_match cm 
                         LEFT JOIN chess_match_livescore ls ON cm.match_id = ls.match_id
-                        WHERE cm.match_status = %s ORDER BY cm.start_time {sort_order}""", (db_status,))
+                        WHERE cm.match_status = %s AND cm.gender = %s ORDER BY cm.start_time {sort_order}""", (db_status, gender))
             rows = cur.fetchall()
             for row in rows: matches.append({"id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], "date": fmt_date(row[4]), "time": fmt_time(row[4]), "status": row[5], "scoreA": "", "scoreB": "", "summary": row[6] or "Live"})
+        
+        elif sport == 'dodgeball':
+            cur.execute(f"""SELECT dm.match_id, dm.team_a_name, dm.team_b_name, dm.venue, dm.start_time, dm.match_status,
+                        ls.team_a_score, ls.team_b_score
+                        FROM dodgeball_match dm
+                        LEFT JOIN dodgeball_match_livescore ls ON dm.match_id = ls.match_id
+                        WHERE dm.match_status = %s AND dm.gender = %s ORDER BY dm.start_time {sort_order}""", (db_status, gender))
+            rows = cur.fetchall()
+            for row in rows:
+                sA = str(row[6]) if row[6] is not None else "0"
+                sB = str(row[7]) if row[7] is not None else "0"
+                summary = "Live" if row[5] == "live" else ("Upcoming" if row[5] == "upcoming" else "Finished")
+                matches.append({"id": row[0], "teamA": row[1], "teamB": row[2], "venue": row[3], "date": fmt_date(row[4]), "time": fmt_time(row[4]), "status": row[5], "scoreA": sA, "scoreB": sB, "summary": summary})
 
         return jsonify(matches)
     except Exception as e:
@@ -1278,5 +1364,5 @@ def download_scorecard_pdf(match_id):
     return jsonify({"status": "error", "message": "PDF generation not implemented on backend yet."}), 501
 
 if __name__ == '__main__':
-    update_db_schema()
+    update_db_schema() # Keep schema update for robustness
     app.run(host='0.0.0.0', port=5000, debug=True)

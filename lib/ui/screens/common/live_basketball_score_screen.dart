@@ -54,7 +54,7 @@ class _LiveBasketballScoreScreenState extends State<LiveBasketballScoreScreen> {
   void initState() {
     super.initState();
     _fetchLiveScore();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted && _matchStatus != 'finished') {
         _fetchLiveScore(isRefresh: true);
       }
@@ -72,7 +72,6 @@ class _LiveBasketballScoreScreenState extends State<LiveBasketballScoreScreen> {
     if (!mounted) return;
 
     try {
-      // --- FIX: Use ApiConstants ---
       final response = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/api/get_basketball_live_score/${widget.matchId}'),
       );
@@ -142,9 +141,9 @@ class _LiveBasketballScoreScreenState extends State<LiveBasketballScoreScreen> {
     };
 
     try {
-      // --- FIX: Use ApiConstants ---
+      // --- FIXED: Use the unique endpoint name ---
       await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/api/update_basketball_score/${widget.matchId}'),
+        Uri.parse('${ApiConstants.baseUrl}/api/update_basketball_match_score/${widget.matchId}'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(payload),
       );

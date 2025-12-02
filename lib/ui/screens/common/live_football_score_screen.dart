@@ -69,7 +69,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
     super.initState();
     _fetchLiveScore();
     if (!widget.isAdmin) {
-      _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) => _fetchLiveScore());
+      _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) => _fetchLiveScore());
     }
   }
 
@@ -738,7 +738,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
                             style: const TextStyle(fontSize: 11, color: Colors.black87),
                             textAlign: TextAlign.center,
                           ),
-                        )).toList()
+                        ))
                       else
                         const SizedBox(height: 10), 
                     ],
@@ -770,7 +770,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
                             style: const TextStyle(fontSize: 11, color: Colors.black87),
                             textAlign: TextAlign.center,
                           ),
-                        )).toList()
+                        ))
                       else
                          const SizedBox(height: 10),
                     ],
@@ -833,7 +833,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
             "${goal['player']} ${goal['time']}'",
             style: const TextStyle(fontSize: 12, color: Colors.black87),
             textAlign: TextAlign.center,
-          )).toList()
+          ))
       ],
     );
   }
@@ -902,7 +902,7 @@ class _LiveFootballScoreScreenState extends State<LiveFootballScoreScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(30),
-        boxShadow: [const BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

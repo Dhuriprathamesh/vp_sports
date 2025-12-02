@@ -55,7 +55,7 @@ class _LiveVolleyballScoreScreenState extends State<LiveVolleyballScoreScreen> {
     
     _fetchLiveScore();
     if (!widget.isAdmin) {
-      _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) => _fetchLiveScore());
+      _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) => _fetchLiveScore());
     }
   }
 
@@ -151,8 +151,11 @@ class _LiveVolleyballScoreScreenState extends State<LiveVolleyballScoreScreen> {
     if (_matchStatus == 'finished') return;
 
     setState(() {
-      if (isTeamA) _teamACurrentPoints++;
-      else _teamBCurrentPoints++;
+      if (isTeamA) {
+        _teamACurrentPoints++;
+      } else {
+        _teamBCurrentPoints++;
+      }
     });
     
     // --- SCORING RULES LOGIC ---

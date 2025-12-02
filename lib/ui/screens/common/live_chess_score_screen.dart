@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 import '../../../core/app_theme.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/api_constants.dart'; // Import ApiConstants
 
 class LiveChessScoreScreen extends StatefulWidget {
@@ -68,7 +67,7 @@ class _LiveChessScoreScreenState extends State<LiveChessScoreScreen> {
       );
     }
 
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) => _fetchLiveScore());
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) => _fetchLiveScore());
   }
 
   // Fetch specific match details to get player names

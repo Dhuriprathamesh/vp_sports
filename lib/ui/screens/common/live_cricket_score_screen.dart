@@ -121,7 +121,7 @@ class _LiveCricketScoreScreenState extends State<LiveCricketScoreScreen> {
     _fetchLiveScore(); // Initial fetch
     
     // Poll more frequently, but we will cancel this if match is finished
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         _fetchLiveScore(isRefresh: true);
       }

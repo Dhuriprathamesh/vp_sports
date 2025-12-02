@@ -47,7 +47,7 @@ class _LiveAthleticsScoreScreenState extends State<LiveAthleticsScoreScreen> {
   void initState() {
     super.initState();
     _fetchLiveScore();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) _fetchLiveScore(isBackground: true);
     });
   }

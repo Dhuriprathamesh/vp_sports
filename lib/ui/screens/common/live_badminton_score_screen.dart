@@ -56,7 +56,7 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
     super.initState();
     _fetchLiveScore();
     // Poll every 10 seconds if not admin or if match is live to keep data fresh
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted && !_isMatchFinished) {
         _fetchLiveScore(isRefresh: true);
       }
@@ -124,12 +124,14 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
          });
       }
     } catch (e) {
-      if (mounted) setState(() { 
+      if (mounted) {
+        setState(() { 
          _isLoading = false; 
          if (!isRefresh || _setScores.isEmpty) {
            _errorMessage = 'Connection error.';
          }
       });
+      }
     }
   }
 
@@ -207,7 +209,11 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
       int p1 = updatedSetScores[_currentSetIndex]['team1']!;
       int p2 = updatedSetScores[_currentSetIndex]['team2']!;
       
-      if (team == 1) p1++; else p2++;
+      if (team == 1) {
+        p1++;
+      } else {
+        p2++;
+      }
       updatedSetScores[_currentSetIndex] = {'team1': p1, 'team2': p2};
 
       int nextCurrentSet = _currentSet;
@@ -223,7 +229,11 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
         int t2Wins = 0;
         for(var score in updatedSetScores) {
             if (_isSetWon(score['team1']!, score['team2']!)) {
-                if(score['team1']! > score['team2']!) t1Wins++; else t2Wins++;
+                if(score['team1']! > score['team2']!) {
+                  t1Wins++;
+                } else {
+                  t2Wins++;
+                }
             }
         }
 
@@ -247,8 +257,8 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
       }
       
       _updateScore(
-        team1Set1: updatedSetScores.length > 0 ? updatedSetScores[0]['team1']! : 0,
-        team2Set1: updatedSetScores.length > 0 ? updatedSetScores[0]['team2']! : 0,
+        team1Set1: updatedSetScores.isNotEmpty ? updatedSetScores[0]['team1']! : 0,
+        team2Set1: updatedSetScores.isNotEmpty ? updatedSetScores[0]['team2']! : 0,
         team1Set2: updatedSetScores.length > 1 ? updatedSetScores[1]['team1']! : 0,
         team2Set2: updatedSetScores.length > 1 ? updatedSetScores[1]['team2']! : 0,
         team1Set3: updatedSetScores.length > 2 ? updatedSetScores[2]['team1']! : 0,
@@ -277,8 +287,8 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
     final String statusText = "Set $_currentSet: $p1 - $p2";
 
     _updateScore(
-      team1Set1: updatedSetScores.length > 0 ? updatedSetScores[0]['team1']! : 0,
-      team2Set1: updatedSetScores.length > 0 ? updatedSetScores[0]['team2']! : 0,
+      team1Set1: updatedSetScores.isNotEmpty ? updatedSetScores[0]['team1']! : 0,
+      team2Set1: updatedSetScores.isNotEmpty ? updatedSetScores[0]['team2']! : 0,
       team1Set2: updatedSetScores.length > 1 ? updatedSetScores[1]['team1']! : 0,
       team2Set2: updatedSetScores.length > 1 ? updatedSetScores[1]['team2']! : 0,
       team1Set3: updatedSetScores.length > 2 ? updatedSetScores[2]['team1']! : 0,
@@ -524,7 +534,7 @@ class _LiveBadmintonScoreScreenState extends State<LiveBadmintonScoreScreen> {
                     children: [
                       Row(
                         children: [
-                          Text("Set ${index + 1}", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 15)),
+                          Text("Set ${index + 1}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 15)),
                           const SizedBox(width: 12),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

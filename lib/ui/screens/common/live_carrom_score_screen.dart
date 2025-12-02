@@ -42,7 +42,7 @@ class _LiveCarromScoreScreenState extends State<LiveCarromScoreScreen> {
   void initState() {
     super.initState();
     _fetchLiveScore();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) _fetchLiveScore(isRefresh: true);
     });
   }
@@ -119,7 +119,7 @@ class _LiveCarromScoreScreenState extends State<LiveCarromScoreScreen> {
                 const Text("Select Winner (Optional)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedWinner,
+                  initialValue: _selectedWinner,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -171,8 +171,8 @@ class _LiveCarromScoreScreenState extends State<LiveCarromScoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = const Color(0xFF004D40); 
-    final bgColor = const Color(0xFFFFF3E0); 
+    const primaryColor = Color(0xFF004D40); 
+    const bgColor = Color(0xFFFFF3E0); 
 
     // --- UPDATED TITLE LOGIC ---
     String title = "Carrom Live";

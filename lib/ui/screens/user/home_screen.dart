@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import 'sports_details.dart'; 
 import 'leaderboard_screen.dart'; 
-import '../../widgets/live_matches_carousel.dart'; // Import the new carousel
+import '../../widgets/live_matches_carousel.dart'; 
 
 class HomeScreen extends StatelessWidget {
   final bool isForBoys;
@@ -225,13 +225,13 @@ class _HomeScreenViewState extends State<_HomeScreenView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- REAL LIVE MATCHES CAROUSEL ---
+          // --- LIVE MATCHES CAROUSEL ---
+          // Passing isForBoys ensures the carousel fetches the correct gender's data
           LiveMatchesCarousel(
             isForBoys: widget.isForBoys,
             isAdmin: false, // User Mode
             onGenderToggle: widget.onGenderToggle,
           ),
-          // ----------------------------------
           
           _buildCategoryToggle(context),
           AnimatedSwitcher(
@@ -351,12 +351,40 @@ class _HomeScreenViewState extends State<_HomeScreenView>
     );
   }
 
+  // --- DYNAMIC SPORT LIST LOGIC ---
+  List<Map<String, dynamic>> _getOutdoorSports() {
+    List<Map<String, dynamic>> list = [
+        {'name': 'Cricket', 'icon': Icons.sports_cricket},
+        {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+        {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+        {'name': 'Athletics', 'icon': Icons.directions_run},
+        {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
+    ];
+
+    // Conditional insertion: Football for Boys, Dodgeball for Girls
+    if (widget.isForBoys) {
+       list.insert(1, {'name': 'Football', 'icon': Icons.sports_soccer});
+    } else {
+       list.insert(1, {'name': 'Dodgeball', 'icon': Icons.sports_handball}); // Uses Handball icon for Dodgeball
+    }
+    
+    return list;
+  }
+
+  List<Map<String, dynamic>> _getIndoorSports() => [
+        {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, 
+        {'name': 'Carrom', 'icon': Icons.album},
+        {'name': 'Badminton', 'icon': Icons.filter_vintage}, 
+      ];
+
   String? _getAssetImage(String sportName) {
     switch (sportName) {
       case 'Cricket': return 'assets/cricket.png';
       case 'Football': return 'assets/football.png';
       case 'Volleyball': return 'assets/volleyball.png';
       case 'Kabaddi': return 'assets/kabaddi.jpeg';
+      // No specific asset for Dodgeball, will use default card style
       default: return null;
     }
   }
@@ -404,22 +432,6 @@ class _HomeScreenViewState extends State<_HomeScreenView>
       ],
     );
   }
-
-  List<Map<String, dynamic>> _getOutdoorSports() => [
-        {'name': 'Cricket', 'icon': Icons.sports_cricket},
-        {'name': 'Football', 'icon': Icons.sports_soccer},
-        {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
-        {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
-        {'name': 'Athletics', 'icon': Icons.directions_run},
-        {'name': 'Basketball', 'icon': Icons.sports_basketball},
-      ];
-
-  List<Map<String, dynamic>> _getIndoorSports() => [
-        {'name': 'Chess', 'icon': Icons.gamepad_outlined},
-        {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
-        {'name': 'Carrom', 'icon': Icons.album},
-        {'name': 'Badminton', 'icon': Icons.filter_vintage},
-      ];
 }
 
 class FadeInAnimation extends StatelessWidget {
@@ -440,7 +452,13 @@ class _SportCard extends StatelessWidget {
   final VoidCallback onTap;
   final String? backgroundImage;
 
-  const _SportCard({required this.name, required this.icon, required this.iconColor, required this.onTap, this.backgroundImage});
+  const _SportCard({
+    required this.name,
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+    this.backgroundImage,
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import 'admin_sports_details.dart'; // Ensure this matches the file name above
+import 'admin_sports_details.dart'; 
 import 'admin_leaderboard.dart';
-import 'add_match.dart';
 import '../../widgets/live_matches_carousel.dart'; 
 
 class AdminHomeScreen extends StatelessWidget {
@@ -144,7 +143,7 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
               const Icon(Icons.sports, color: Colors.white),
         ),
       ),
-      title: const Text('Sports Mania'),
+      title: const Text('Sports Mania Admin'),
       actions: [
         _buildProfileIcon(context),
       ],
@@ -233,11 +232,10 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // --- LIVE MATCHES CAROUSEL ---
-          // This widget handles fetching its own data.
-          // Ensure your backend API is returning scores in 'get_matches' as per the previous fix.
+          // Passing isForBoys ensures the carousel fetches the correct gender's data
           LiveMatchesCarousel(
             isForBoys: widget.isForBoys,
-            isAdmin: true, // We are in Admin Home
+            isAdmin: true, 
             onGenderToggle: widget.onGenderToggle,
           ),
           
@@ -376,6 +374,10 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
               } else if (sportName == 'Kabaddi') {
                 sportCard = _buildKabaddiCard(
                     context, sportName, sportIcon!, iconColor);
+              } else if (sportName == 'Dodgeball') {
+                // New Handler for Dodgeball
+                sportCard = _buildDefaultSportCard(
+                    context, name: sportName, icon: sportIcon, iconColor: iconColor);
               } else {
                 sportCard = _buildDefaultSportCard(
                     context, name: sportName, icon: sportIcon, iconColor: iconColor);
@@ -511,14 +513,26 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
     );
   }
 
-  List<Map<String, dynamic>> _getOutdoorSports() => [
+  // --- DYNAMIC SPORT LIST LOGIC ---
+  List<Map<String, dynamic>> _getOutdoorSports() {
+    // 1. Base List of shared sports
+    List<Map<String, dynamic>> list = [
         {'name': 'Cricket', 'icon': Icons.sports_cricket},
-        {'name': 'Football', 'icon': Icons.sports_soccer},
         {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
         {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
         {'name': 'Athletics', 'icon': Icons.directions_run},
         {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
-      ];
+    ];
+
+    // 2. Gender Specific Logic: Football (Boys) vs Dodgeball (Girls)
+    if (widget.isForBoys) {
+       list.insert(1, {'name': 'Football', 'icon': Icons.sports_soccer});
+    } else {
+       list.insert(1, {'name': 'Dodgeball', 'icon': Icons.sports_handball}); // Uses Handball icon for Dodgeball
+    }
+    
+    return list;
+  }
 
   List<Map<String, dynamic>> _getIndoorSports() => [
         {'name': 'Chess', 'icon': Icons.gamepad_outlined},

@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-
 // Core Imports
 import '../../../core/api_constants.dart';
 
 class AddMatchScreen extends StatefulWidget {
   final String sportName;
+  final bool isForBoys; // Required to distinguish between Boys/Girls data
 
-  const AddMatchScreen({super.key, required this.sportName});
+  const AddMatchScreen({
+    super.key, 
+    required this.sportName,
+    required this.isForBoys,
+  });
 
   @override
   State<AddMatchScreen> createState() => _AddMatchScreenState();
@@ -34,7 +37,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   String? _selectedDeptB;
   String? _selectedDeptC;
 
-  // Controllers (Used to store selected values for submission)
+  // Controllers
   late final TextEditingController _teamANameController;
   late final TextEditingController _teamBNameController;
   late final TextEditingController _teamCNameController;
@@ -59,10 +62,8 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   String _category = 'singles'; 
   int _totalSets = 3;
   
-  String? _selectedPlayerA;
-  String? _selectedPlayerB;
-  String? _selectedPlayerA2;
-  String? _selectedPlayerB2;
+  // Helper to get gender string for API
+  String get _genderStr => widget.isForBoys ? 'Boys' : 'Girls';
 
   @override
   void initState() {
@@ -91,20 +92,18 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   }
 
   // --- API: Fetch Players for a specific team/dept ---
-  // This is called when the Team Name Dropdown changes
+  // Updated to include gender param so we get the correct list (e.g., Girls CO vs Boys CO)
   Future<void> _fetchPlayersForTeam(String teamName, String targetList) async {
     setState(() => _isFetchingPlayers = true);
     
-    // e.g. /api/get_players_by_team?team=CO&sport=Cricket
-    final String apiUrl = '${ApiConstants.baseUrl}/api/get_players_by_team?team=$teamName&sport=${widget.sportName}';
+    final String apiUrl = '${ApiConstants.baseUrl}/api/get_players_by_team?team=$teamName&sport=${widget.sportName}&gender=$_genderStr';
     
     try {
       final response = await http.get(Uri.parse(apiUrl));
       if (response.statusCode == 200) {
-        // Expecting a simple list of strings: ["Player 1", "Player 2", ...]
         List<dynamic> data = json.decode(response.body);
-        List<String> names = data.map((e) => e.toString()).toSet().toList(); // Remove duplicates
-        names.sort(); // Sort alphabetically
+        List<String> names = data.map((e) => e.toString()).toSet().toList(); 
+        names.sort(); 
         
         if (mounted) {
           setState(() {
@@ -125,9 +124,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   }
 
   // --- API: Sync DB from Google Sheets ---
+  // Updated to include gender param so backend picks the correct CSV URL
   Future<void> _syncPlayersWithSheets() async {
     setState(() => _isSyncing = true);
-    final String apiUrl = '${ApiConstants.baseUrl}/api/sync_players?sport=${widget.sportName}';
+    final String apiUrl = '${ApiConstants.baseUrl}/api/sync_players?sport=${widget.sportName}&gender=$_genderStr';
 
     try {
       final response = await http.get(Uri.parse(apiUrl));
@@ -166,11 +166,12 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     if (_formKey.currentState != null && !_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
+    // This converts "Dodgeball" -> "dodgeball", mapping to /api/add_dodgeball_match
     final sportNameUrl = widget.sportName.toLowerCase().replaceAll(' ', '_'); 
     final String apiUrl = '${ApiConstants.baseUrl}/api/add_${sportNameUrl}_match';
     
     try {
-      // Gather selected player names from controllers
+      // Gather selected player names
       final List<String> teamAPlayers = _teamAPlayerControllers.map((c) => c.text).where((name) => name.isNotEmpty).toList();
       final List<String> teamBPlayers = _teamBPlayerControllers.map((c) => c.text).where((name) => name.isNotEmpty).toList();
       
@@ -181,6 +182,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         'team_b_players': teamBPlayers,
         'start_time': _startTimeController.text,
         'venue': _venueController.text,
+        'gender': _genderStr, // CRITICAL: Pass gender to backend
       };
 
       // --- Sport Specific Logic ---
@@ -200,6 +202,9 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       } else if (widget.sportName == 'Football') {
         matchData['match_duration'] = _matchDurationController.text;
         matchData['referees'] = _refereesController.text.split(',');
+      } else if (widget.sportName == 'Dodgeball') {
+        // Dodgeball specific fields
+        matchData['officials'] = _refereesController.text.split(',');
       } else if (widget.sportName == 'Kabaddi') {
         matchData['match_duration'] = _matchDurationController.text;
         matchData['officials'] = _refereesController.text.split(',');
@@ -208,20 +213,15 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         matchData['officials'] = _refereesController.text.split(',');
       } else if (widget.sportName == 'Chess' || widget.sportName == 'Carrom' || widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') {
          matchData['umpires'] = _umpiresController.text.split(',');
+         // All indoor sports now use the 5 slot default, regardless of singles/doubles flag, 
+         // but we keep category/sets for the backend payload structure
          if (widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') {
             matchData['total_sets'] = _totalSets;
             matchData['category'] = _category;
             
-            if (_category == 'doubles') {
-               // Combine names for doubles if 2 players are selected
-               if (_teamAPlayerControllers.length >= 2 && _teamBPlayerControllers.length >= 2) {
-                   matchData['player_a_selected'] = "${_teamAPlayerControllers[0].text} & ${_teamAPlayerControllers[1].text}";
-                   matchData['player_b_selected'] = "${_teamBPlayerControllers[0].text} & ${_teamBPlayerControllers[1].text}";
-               }
-            } else {
-               if (_teamAPlayerControllers.isNotEmpty) matchData['player_a_selected'] = _teamAPlayerControllers[0].text;
-               if (_teamBPlayerControllers.isNotEmpty) matchData['player_b_selected'] = _teamBPlayerControllers[0].text;
-            }
+            // Player selection helper fields for TT/Badminton match creation
+            if (_teamAPlayerControllers.isNotEmpty) matchData['player_a_selected'] = _teamAPlayerControllers[0].text;
+            if (_teamBPlayerControllers.isNotEmpty) matchData['player_b_selected'] = _teamBPlayerControllers[0].text;
          } else if (widget.sportName == 'Chess') {
              if (_teamAPlayerControllers.isNotEmpty) matchData['player_a_selected'] = _teamAPlayerControllers[0].text;
              if (_teamBPlayerControllers.isNotEmpty) matchData['player_b_selected'] = _teamBPlayerControllers[0].text;
@@ -245,6 +245,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     }
   }
 
+  // NOTE: The original and duplicate dispose() methods were here in the source file, 
+  // causing the `duplicate_definition` error. I am ensuring only one remains.
+  // The clean version provided in the previous turn correctly ensures only one exists.
+  
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -271,7 +275,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                     icon: _isSyncing 
                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) 
                       : const Icon(Icons.sync, size: 16),
-                    label: Text(_isSyncing ? "Syncing..." : "Sync from Google Forms", style: const TextStyle(fontSize: 12)),
+                    label: Text(_isSyncing ? "Syncing..." : "Sync $_genderStr Players from Sheets", style: const TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.amber.shade200,
                       foregroundColor: Colors.black,
@@ -328,7 +332,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
       children: [
         Flexible(
           child: Text(
-            'Add ${widget.sportName} Match',
+            'Add ${widget.sportName} Match ($_genderStr)',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
             overflow: TextOverflow.ellipsis,
           ),
@@ -391,7 +395,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
 
-  // --- UPDATED: Build Team Page with Filtered Dropdowns ---
   Widget _buildTeamPage(String teamLabel, TextEditingController teamNameController, List<TextEditingController> playerControllers, List<String> availablePlayers) {
     final playerCounts = _getSportPlayerCounts(widget.sportName);
     final int playingCount = playerCounts['players']!;
@@ -399,7 +402,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     
     final nameLabel = isAthletics && teamLabel == 'Event' ? "Enter Event Name" : 'Select Team $teamLabel Department';
     final headerLabel = isAthletics && teamLabel == 'Event' ? "Event Name" : 'Team $teamLabel Name';
-    final listHeader = isAthletics ? "Participants" : 'Team $teamLabel Players (${playingCount} Playing + ${playerCounts['subs']} Subs)';
+    final listHeader = isAthletics ? "Participants" : 'Team $teamLabel Players (${playingCount} Active + ${playerCounts['subs']} Subs)';
 
     return SingleChildScrollView(
       key: PageStorageKey('team_$teamLabel'),
@@ -408,7 +411,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
         children: [
           _buildSectionHeader(headerLabel),
           
-          // --- TEAM NAME DROPDOWN ---
           DropdownButtonFormField<String>(
             value: (teamLabel == 'A' ? _selectedDeptA : (teamLabel == 'B' ? _selectedDeptB : _selectedDeptC)),
             decoration: const InputDecoration(
@@ -431,7 +433,7 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                   // Fetch and Auto-Fill players
                   _fetchPlayersForTeam(val, teamLabel); 
                   
-                  // Clear previous player selections to avoid mismatches
+                  // Clear previous player selections
                   for(var c in playerControllers) c.clear();
                 });
               }
@@ -441,7 +443,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           const SizedBox(height: 24),
           _buildSectionHeader(listHeader),
           
-          // --- PLAYERS LIST with DUPLICATE FILTERING ---
           if (_isFetchingPlayers) 
              const Padding(
                padding: EdgeInsets.all(20.0),
@@ -454,7 +455,6 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                     ? "Runner ${index + 1}"
                     : (isSub ? "Substitute ${index - playingCount + 1}" : "Player ${index + 1}");
 
-                // 1. Identify values already selected in OTHER dropdowns for this team
                 Set<String> selectedByOthers = {};
                 for (int i = 0; i < playerControllers.length; i++) {
                   if (i != index && playerControllers[i].text.isNotEmpty) {
@@ -462,13 +462,10 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                   }
                 }
 
-                // 2. Create a list excluding those already selected
                 List<String> filteredPlayers = availablePlayers.where((p) {
-                  // Include if not selected elsewhere, OR if it is the currently selected value for THIS dropdown
                   return !selectedByOthers.contains(p) || p == playerControllers[index].text;
                 }).toList();
 
-                // 3. Validate current value against new list
                 String? currentValue = playerControllers[index].text;
                 if (currentValue.isEmpty || !filteredPlayers.contains(currentValue)) {
                    currentValue = null;
@@ -486,11 +483,9 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
                       filled: true, fillColor: Colors.white
                     ),
                     hint: const Text("Select Player"),
-                    // Use filtered list here
                     items: filteredPlayers.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                     onChanged: (val) {
                       setState(() {
-                        // If this player was selected in another slot, clear that slot to prevent duplicates
                         for (int i = 0; i < playerControllers.length; i++) {
                            if (i != index && playerControllers[i].text == val) {
                               playerControllers[i].clear(); 
@@ -518,6 +513,29 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
   }
 
   Widget _buildMatchInfoPage() {
+      // All fields will now use _buildInfoField wrapper for spacing
+      List<Widget> formFields = _getSportSpecificMatchInfoFields();
+      
+      // Separate widgets for consistent layout and spacing
+      List<Widget> fixedFields = [
+        _buildTextFormField(label: 'Venue', controller: _venueController, icon: Icons.location_on_outlined),
+        _buildTextFormField(controller: _startTimeController, label: 'Start Time', icon: Icons.schedule_outlined, enablePicker: true),
+      ];
+
+      // Combine all fields, ensuring every item has proper spacing applied by a wrapper
+      List<Widget> allWidgets = [];
+      
+      // Custom Sport Fields
+      for (var field in formFields) {
+          allWidgets.add(_buildInfoFieldWrapper(field));
+      }
+      
+      // Fixed fields
+      for (var field in fixedFields) {
+          allWidgets.add(_buildInfoFieldWrapper(field));
+      }
+
+
       return SingleChildScrollView(
         key: const PageStorageKey('match_info'),
         child: Form(
@@ -526,16 +544,22 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
             children: [
               const Text('Match Information', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              ..._getSportSpecificMatchInfoFields(),
-              const SizedBox(height: 10),
-              _buildTextFormField(label: 'Venue', controller: _venueController, icon: Icons.location_on_outlined),
-              _buildTextFormField(controller: _startTimeController, label: 'Start Time', icon: Icons.schedule_outlined),
+              
+              ...allWidgets
             ],
           ),
         ),
       );
   }
   
+  // New wrapper function to enforce bottom margin
+  Widget _buildInfoFieldWrapper(Widget child) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: child,
+    );
+  }
+
   Widget _buildNavigationButtons() {
     final int maxPages = widget.sportName == 'Athletics' ? 3 : 2;
     return Row(
@@ -572,36 +596,46 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
     );
   }
   
+  // --- UPDATED PLAYER COUNTS BASED ON USER INPUT TABLE ---
   Map<String, int> _getSportPlayerCounts(String sportName) {
     switch (sportName) {
-      case 'Basketball': return {'players': 5, 'subs': 3}; 
-      case 'Cricket': return {'players': 11, 'subs': 2};
-      case 'Football': return {'players': 11, 'subs': 3};
-      case 'Kabaddi': return {'players': 7, 'subs': 3};
-      case 'Volleyball': return {'players': 6, 'subs': 3};
-      case 'Athletics': return {'players': 5, 'subs': 0}; 
-      case 'Chess': return {'players': 1, 'subs': 0}; 
-      case 'Carrom': return {'players': 2, 'subs': 0}; 
-      case 'Table Tennis': return {'players': 2, 'subs': 0};
-      case 'Badminton': return {'players': 2, 'subs': 0};
+      case 'Cricket': return {'players': 11, 'subs': 5};
+      case 'Volleyball': return {'players': 6, 'subs': 6};
+      case 'Kabaddi': return {'players': 7, 'subs': 5};
+      case 'Basketball': return {'players': 5, 'subs': 7}; 
+
+      // Gender-specific swaps
+      case 'Football': return {'players': 7, 'subs': 5}; // Boys
+      case 'Dodgeball': return {'players': 9, 'subs': 3}; // Girls
+
+      // All Indoor Sports and Athletics now use 5 active players (0 subs)
+      case 'Athletics': 
+      case 'Chess': 
+      case 'Carrom': 
+      case 'Table Tennis': 
+      case 'Badminton': 
+        return {'players': 5, 'subs': 0};
+        
       default: return {'players': 1, 'subs': 0};
     }
   }
 
+  // NOTE: This function now returns the widgets without individual SizedBox separators.
   List<Widget> _getSportSpecificMatchInfoFields() {
      List<Widget> fields = [];
+     
      if(widget.sportName == 'Cricket') {
        fields.add(_buildTextFormField(controller: _oversController, label: 'Overs', icon: Icons.sports_cricket));
-       fields.add(const SizedBox(height: 12));
        fields.add(_buildTextFormField(controller: _umpiresController, label: 'Umpires (comma separated)', icon: Icons.people));
+       
      } else if(widget.sportName == 'Football' || widget.sportName == 'Kabaddi') {
        fields.add(_buildTextFormField(controller: _matchDurationController, label: 'Duration (mins)', icon: Icons.timer));
-       fields.add(const SizedBox(height: 12));
        fields.add(_buildTextFormField(controller: _refereesController, label: 'Referees/Officials', icon: Icons.people));
+       
      } else if (widget.sportName == 'Basketball') {
        fields.add(_buildTextFormField(controller: _totalQuartersController, label: 'Total Quarters', icon: Icons.timer));
-       fields.add(const SizedBox(height: 12));
        fields.add(_buildTextFormField(controller: _umpiresController, label: 'Umpires', icon: Icons.people));
+       
      } else if (widget.sportName == 'Volleyball') {
        fields.add(DropdownButtonFormField<String>(
           value: _volleyballFormat,
@@ -609,8 +643,8 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           items: const [DropdownMenuItem(value: "Best of 3 Sets", child: Text("Best of 3 Sets")), DropdownMenuItem(value: "Best of 5 Sets", child: Text("Best of 5 Sets"))],
           onChanged: (v) => setState(() => _volleyballFormat = v!),
        ));
-       fields.add(const SizedBox(height: 12));
        fields.add(_buildTextFormField(controller: _refereesController, label: 'Referees', icon: Icons.people));
+       
      } else if (widget.sportName == 'Table Tennis' || widget.sportName == 'Badminton') {
         fields.add(DropdownButtonFormField<String>(
           value: _category,
@@ -618,26 +652,45 @@ class _AddMatchScreenState extends State<AddMatchScreen> {
           items: const [DropdownMenuItem(value: "singles", child: Text("Singles")), DropdownMenuItem(value: "doubles", child: Text("Doubles"))],
           onChanged: (v) => setState(() => _category = v!),
        ));
-       fields.add(const SizedBox(height: 12));
        fields.add(DropdownButtonFormField<int>(
           value: _totalSets,
           decoration: const InputDecoration(labelText: "Total Sets", border: OutlineInputBorder(), prefixIcon: Icon(Icons.format_list_numbered)),
           items: const [DropdownMenuItem(value: 3, child: Text("Best of 3")), DropdownMenuItem(value: 5, child: Text("Best of 5"))],
           onChanged: (v) => setState(() => _totalSets = v!),
        ));
-       fields.add(const SizedBox(height: 12));
        fields.add(_buildTextFormField(controller: _umpiresController, label: 'Umpires', icon: Icons.people));
+       
      } else {
-       // Generic fields for others
-       fields.add(_buildTextFormField(controller: _umpiresController, label: 'Officials/Umpires', icon: Icons.people));
+       // Generic fields for others (Dodgeball, Athletics, Chess, Carrom)
+       fields.add(_buildTextFormField(controller: _refereesController, label: 'Officials/Referees', icon: Icons.people));
      }
      return fields;
   }
 
-  Widget _buildTextFormField({required String label, IconData? icon, TextEditingController? controller, TextInputType? keyboardType}) {
+  Widget _buildTextFormField({required String label, IconData? icon, TextEditingController? controller, TextInputType? keyboardType, bool enablePicker = false}) {
+      
+      // Custom onTap logic for Date/Time picker
+      final Function()? onTap = enablePicker ? () async {
+          DateTime? date = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime.now().subtract(const Duration(days: 365)),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+          );
+          if (date != null) {
+             TimeOfDay? time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+             if (time != null) {
+                final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                controller!.text = DateFormat('yyyy-MM-dd HH:mm:ss').format(dt);
+             }
+          }
+      } : null;
+
       return TextFormField(
         controller: controller, 
         keyboardType: keyboardType,
+        readOnly: enablePicker,
+        onTap: onTap,
         decoration: InputDecoration(
           labelText: label, 
           prefixIcon: Icon(icon), 
