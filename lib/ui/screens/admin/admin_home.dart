@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import 'admin_sports_details.dart'; 
 import 'admin_leaderboard.dart';
+import 'admin_schedule_screen.dart'; // Import the dedicated Admin Schedule Screen
 import '../../widgets/live_matches_carousel.dart'; 
 
 class AdminHomeScreen extends StatelessWidget {
@@ -360,32 +361,18 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
 
               if (sportName == null) return const SizedBox();
 
-              Widget sportCard;
-
-              if (sportName == 'Cricket') {
-                sportCard = _buildCricketCard(
-                    context, sportName, sportIcon!, iconColor);
-              } else if (sportName == 'Football') {
-                sportCard = _buildFootballCard(
-                    context, sportName, sportIcon!, iconColor);
-              } else if (sportName == 'Volleyball') {
-                sportCard = _buildVolleyballCard(
-                    context, sportName, sportIcon!, iconColor);
-              } else if (sportName == 'Kabaddi') {
-                sportCard = _buildKabaddiCard(
-                    context, sportName, sportIcon!, iconColor);
-              } else if (sportName == 'Dodgeball') {
-                // New Handler for Dodgeball
-                sportCard = _buildDefaultSportCard(
-                    context, name: sportName, icon: sportIcon, iconColor: iconColor);
-              } else {
-                sportCard = _buildDefaultSportCard(
-                    context, name: sportName, icon: sportIcon, iconColor: iconColor);
-              }
+              // Get the background image asset for this sport
+              final String? bgImage = _getAssetImage(sportName);
 
               return FadeInAnimation(
                 delay: Duration(milliseconds: 150 + index * 60),
-                child: sportCard,
+                child: _SportCard(
+                  name: sportName,
+                  icon: sportIcon!,
+                  iconColor: iconColor,
+                  backgroundImage: bgImage, // Pass the image here
+                  onTap: () => _navigateToDetails(context, sportName, sportIcon),
+                ),
               );
             },
           ),
@@ -394,63 +381,46 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
     );
   }
 
-  // --- Specific Card Builders ---
-
-  Widget _buildCricketCard(
-      BuildContext context, String name, IconData icon, Color iconColor) {
-    return _SportCard(
-      name: name,
-      icon: icon,
-      iconColor: iconColor,
-      backgroundImage: 'assets/cricket.png',
-      onTap: () => _navigateToDetails(context, name, icon),
-    );
-  }
-
-  Widget _buildFootballCard(
-      BuildContext context, String name, IconData icon, Color iconColor) {
-    return _SportCard(
-      name: name,
-      icon: icon,
-      iconColor: iconColor,
-      backgroundImage: 'assets/football.png',
-      onTap: () => _navigateToDetails(context, name, icon),
-    );
-  }
-
-  Widget _buildVolleyballCard(
-      BuildContext context, String name, IconData icon, Color iconColor) {
-    return _SportCard(
-      name: name,
-      icon: icon,
-      iconColor: iconColor,
-      backgroundImage: 'assets/volleyball.png',
-      onTap: () => _navigateToDetails(context, name, icon),
-    );
-  }
-
-  Widget _buildKabaddiCard(
-      BuildContext context, String name, IconData icon, Color iconColor) {
-    return _SportCard(
-      name: name,
-      icon: icon,
-      iconColor: iconColor,
-      backgroundImage: 'assets/kabaddi.jpeg',
-      onTap: () => _navigateToDetails(context, name, icon),
-    );
-  }
-
-  Widget _buildDefaultSportCard(BuildContext context,
-      {String? name, IconData? icon, required Color iconColor}) {
-    if (name == null || icon == null) {
-      return const SizedBox.shrink();
+  // --- Helper to Map Sport Name to Asset Image ---
+  String? _getAssetImage(String sportName) {
+    if (widget.isForBoys) {
+      return _getBoysAssetImage(sportName);
+    } else {
+      return _getGirlsAssetImage(sportName);
     }
-    return _SportCard(
-      name: name,
-      icon: icon,
-      iconColor: iconColor,
-      onTap: () => _navigateToDetails(context, name, icon),
-    );
+  }
+
+  String? _getBoysAssetImage(String sportName) {
+    switch (sportName) {
+      case 'Cricket': return 'assets/cricket.png';
+      case 'Football': return 'assets/football.png';
+      case 'Volleyball': return 'assets/volleyball.png';
+      case 'Kabaddi': return 'assets/kabaddi.jpeg';
+      case 'Basketball': return 'assets/basketball.png';
+      case 'Athletics': return 'assets/athletics.png';
+      case 'Chess': return 'assets/chess.png';
+      case 'Carrom': return 'assets/carrom.png';
+      case 'Table Tennis': return 'assets/table_tennis.png';
+      case 'Badminton': return 'assets/badminton.png';
+      default: return null;
+    }
+  }
+
+  // --- GIRLS SPECIFIC IMAGES ---
+  String? _getGirlsAssetImage(String sportName) {
+    switch (sportName) {
+      case 'Cricket': return 'assets/girls_cricket.png'; 
+      case 'Dodgeball': return 'assets/dodgeball.png';
+      case 'Volleyball': return 'assets/girls_volleyball.png';
+      case 'Kabaddi': return 'assets/girls_kabaddi.jpeg';
+      case 'Basketball': return 'assets/girls_basketball.png';
+      case 'Athletics': return 'assets/girls_athletics.png';
+      case 'Chess': return 'assets/girls_chess.png';
+      case 'Carrom': return 'assets/girls_carrom.png';
+      case 'Table Tennis': return 'assets/girls_table_tennis.png';
+      case 'Badminton': return 'assets/girls_badminton.png';
+      default: return null;
+    }
   }
 
   void _navigateToDetails(BuildContext context, String name, IconData icon) {
@@ -468,7 +438,10 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
     return BottomNavigationBar(
       currentIndex: _bottomNavIndex,
       onTap: (index) {
-        if (index == 2) {
+        if (index == 1) { // SCHEDULE PAGE
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => AdminScheduleScreen(isForBoys: widget.isForBoys)));
+        } else if (index == 2) {
           // Leaderboard is at index 2
           Navigator.of(context).push(
             PageRouteBuilder(
@@ -515,31 +488,54 @@ class _AdminHomeScreenViewState extends State<_AdminHomeScreenView>
 
   // --- DYNAMIC SPORT LIST LOGIC ---
   List<Map<String, dynamic>> _getOutdoorSports() {
-    // 1. Base List of shared sports
-    List<Map<String, dynamic>> list = [
-        {'name': 'Cricket', 'icon': Icons.sports_cricket},
-        {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
-        {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
-        {'name': 'Athletics', 'icon': Icons.directions_run},
-        {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
-    ];
-
-    // 2. Gender Specific Logic: Football (Boys) vs Dodgeball (Girls)
-    if (widget.isForBoys) {
-       list.insert(1, {'name': 'Football', 'icon': Icons.sports_soccer});
-    } else {
-       list.insert(1, {'name': 'Dodgeball', 'icon': Icons.sports_handball}); // Uses Handball icon for Dodgeball
-    }
-    
-    return list;
+    return widget.isForBoys ? _getBoysOutdoorSports() : _getGirlsOutdoorSports();
   }
 
-  List<Map<String, dynamic>> _getIndoorSports() => [
-        {'name': 'Chess', 'icon': Icons.gamepad_outlined},
-        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, 
-        {'name': 'Carrom', 'icon': Icons.album},
-        {'name': 'Badminton', 'icon': Icons.filter_vintage}, 
-      ];
+  List<Map<String, dynamic>> _getIndoorSports() {
+    return widget.isForBoys ? _getBoysIndoorSports() : _getGirlsIndoorSports();
+  }
+
+  // --- Separate Functions for Boys ---
+  List<Map<String, dynamic>> _getBoysOutdoorSports() {
+    return [
+      {'name': 'Cricket', 'icon': Icons.sports_cricket},
+      {'name': 'Football', 'icon': Icons.sports_soccer},
+      {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+      {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+      {'name': 'Athletics', 'icon': Icons.directions_run},
+      {'name': 'Basketball', 'icon': Icons.sports_basketball},
+    ];
+  }
+
+  List<Map<String, dynamic>> _getBoysIndoorSports() {
+    return [
+      {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+      {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
+      {'name': 'Carrom', 'icon': Icons.album},
+      {'name': 'Badminton', 'icon': Icons.filter_vintage},
+    ];
+  }
+
+  // --- Separate Functions for Girls ---
+  List<Map<String, dynamic>> _getGirlsOutdoorSports() {
+    return [
+      {'name': 'Cricket', 'icon': Icons.sports_cricket},
+      {'name': 'Dodgeball', 'icon': Icons.sports_handball},
+      {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+      {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+      {'name': 'Athletics', 'icon': Icons.directions_run},
+      {'name': 'Basketball', 'icon': Icons.sports_basketball},
+    ];
+  }
+
+  List<Map<String, dynamic>> _getGirlsIndoorSports() {
+    return [
+      {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+      {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
+      {'name': 'Carrom', 'icon': Icons.album},
+      {'name': 'Badminton', 'icon': Icons.filter_vintage},
+    ];
+  }
 }
 
 class FadeInAnimation extends StatefulWidget {

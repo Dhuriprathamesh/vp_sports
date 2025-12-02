@@ -70,7 +70,20 @@ def update_db_schema():
     try:
         print("Checking database schema...")
         
-        # 1. Update Team Tables (team_co, team_if, team_ej)
+        # 1. SCHEDULE TABLE (New)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schedule_events (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                day_label VARCHAR(50),
+                event_time VARCHAR(50),
+                event_name VARCHAR(255),
+                venue VARCHAR(255),
+                gender ENUM('Boys', 'Girls') DEFAULT 'Boys',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # 2. Update Team Tables (team_co, team_if, team_ej)
         team_tables = ['team_co', 'team_if', 'team_ej']
         
         # Columns to ensure exist
@@ -99,7 +112,7 @@ def update_db_schema():
                     print(f"Adding {col_name} to {table}...")
                     cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
 
-        # 2. Update Match Tables to have 'gender'
+        # 3. Update Match Tables to have 'gender'
         match_tables = [
             'cricket_match', 'football_match', 'basketball_matches', 
             'kabaddi_match', 'volleyball_match', 'athletics_match', 
@@ -128,9 +141,7 @@ def update_db_schema():
         cursor.close()
         conn.close()
 
-# ==============================================================================
-#                          HELPER: SPORT NAME TO DB COLUMN
-# ==============================================================================
+# ... [Existing Helper Functions] ...
 def get_column_for_sport(sport_name):
     """Maps Google Form sport names to DB column names."""
     if not sport_name: return None
@@ -149,7 +160,59 @@ def get_column_for_sport(sport_name):
     return None
 
 # ==============================================================================
-#                                PLAYER DATA SYNC
+#                                SCHEDULE ENDPOINTS (NEW)
+# ==============================================================================
+
+@app.route('/api/get_schedule', methods=['GET'])
+def get_schedule():
+    gender = request.args.get('gender', 'Boys')
+    conn = get_db_connection()
+    if not conn: return jsonify([]), 500
+    try:
+        cur = conn.cursor(dictionary=True)
+        # Fetch all events for the gender, ordered by Day then Time (simplistic sort)
+        cur.execute("SELECT * FROM schedule_events WHERE gender = %s ORDER BY day_label, event_time", (gender,))
+        rows = cur.fetchall()
+        return jsonify(rows), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/add_schedule_event', methods=['POST'])
+def add_schedule_event():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    try:
+        cur = conn.cursor()
+        sql = "INSERT INTO schedule_events (day_label, event_time, event_name, venue, gender) VALUES (%s, %s, %s, %s, %s)"
+        vals = (data['day'], data['time'], data['event'], data['venue'], data['gender'])
+        cur.execute(sql, vals)
+        conn.commit()
+        return jsonify({"status": "success"}), 201
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/delete_schedule_event', methods=['POST'])
+def delete_schedule_event():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn: return jsonify({"status": "error"}), 500
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM schedule_events WHERE id = %s", (data['id'],))
+        conn.commit()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        conn.close()
+
+# ==============================================================================
+#                                PLAYER DATA SYNC (EXISTING)
 # ==============================================================================
 
 CSV_URLS_BOYS = {
@@ -169,8 +232,6 @@ def sync_players():
     target_sport = request.args.get('sport') 
     gender = request.args.get('gender', 'Boys') 
     
-    print(f"Starting sync for sport: {target_sport if target_sport else 'ALL'} | Gender: {gender}")
-    
     conn = get_db_connection()
     if not conn: return jsonify({"status": "error", "message": "DB Connection Failed"}), 500
     
@@ -185,35 +246,24 @@ def sync_players():
             if not target_col_name:
                  return jsonify({"status": "error", "message": f"Unknown sport: {target_sport}"}), 400
 
-        # Select correct CSVs
         current_csv_urls = CSV_URLS_GIRLS if gender == 'Girls' else CSV_URLS_BOYS
 
         for team_name, url in current_csv_urls.items():
             table_name = f"team_{team_name.lower()}" 
-            
-            # Deletion: Ensure we only delete matching Gender
             if target_sport:
-                # Delete existing players for this sport column AND gender
                 cur.execute(f"DELETE FROM {table_name} WHERE {target_col_name} IS NOT NULL AND gender = %s", (gender,))
             else:
-                # Delete ALL existing players for this gender (less common, but safe)
                 cur.execute(f"DELETE FROM {table_name} WHERE gender = %s", (gender,))
             
             try:
                 response = requests.get(url)
-                if response.status_code != 200: 
-                    print(f"Failed to fetch CSV for {team_name}: {response.status_code}")
-                    continue
-            except Exception as e:
-                print(f"Network error fetching CSV for {team_name}: {e}")
-                continue
+                if response.status_code != 200: continue
+            except: continue
 
             stream = io.StringIO(response.content.decode('utf-8'))
             csv_reader = csv.reader(stream)
-            try: 
-                header = next(csv_reader) 
-            except: 
-                continue 
+            try: header = next(csv_reader) 
+            except: continue 
             
             sport_indices = [i for i, h in enumerate(header) if 'Select the Sport' in h or 'Sport' in h]
             player_start_index = sport_indices[-1] + 1 if sport_indices else 4
@@ -221,12 +271,10 @@ def sync_players():
             for row in csv_reader:
                 if len(row) < 5: continue 
                 row_sport = ""
-                # Heuristic to find sport name in row
                 if len(row) > 2 and row[2].strip(): row_sport = row[2].strip()
                 if not row_sport and len(row) > 3 and row[3].strip(): row_sport = row[3].strip()
                 if not row_sport: continue 
 
-                # Filter Logic
                 if target_sport and target_sport.lower() not in row_sport.lower(): continue
 
                 current_row_col = get_column_for_sport(row_sport)
@@ -236,23 +284,13 @@ def sync_players():
                     if i >= len(row): break
                     p_name = row[i].strip()
                     if p_name and "player" not in p_name.lower(): 
-                        # FINAL FIXED INSERT: Only insert into the player column and gender column
                         sql = f"INSERT INTO {table_name} ({current_row_col}, gender) VALUES (%s, %s)"
                         cur.execute(sql, (p_name, gender))
                         total_added += 1
                             
         conn.commit()
-        print(f"Sync complete. Added {total_added} players.")
         return jsonify({"status": "success", "message": f"Synced {total_added} {gender} players."}), 200
-        
-    except mysql.connector.Error as err:
-        print(f"MySQL Error: {err}")
-        # Rollback in case of error
-        if conn: conn.rollback()
-        return jsonify({"status": "error", "message": f"Database Error: {err}"}), 500
     except Exception as e:
-        traceback.print_exc()
-        # Rollback in case of unexpected error
         if conn: conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
@@ -274,14 +312,10 @@ def get_players_by_team():
     if not conn: return jsonify([]), 500
     try:
         cur = conn.cursor()
-        if team.lower() not in ['co', 'if', 'ej']: return jsonify([]), 400
-        # Filter by gender
         cur.execute(f"SELECT {target_col} FROM {table_name} WHERE {target_col} IS NOT NULL AND {target_col} != '' AND gender = %s ORDER BY {target_col} ASC", (gender,))
         players = cur.fetchall()
         return jsonify([p[0] for p in players]), 200
-    except Exception as e:
-        print(f"Error fetching players: {e}")
-        return jsonify([]), 500
+    except: return jsonify([]), 500
     finally:
         if cur: cur.close()
         if conn: conn.close()
@@ -1364,5 +1398,5 @@ def download_scorecard_pdf(match_id):
     return jsonify({"status": "error", "message": "PDF generation not implemented on backend yet."}), 501
 
 if __name__ == '__main__':
-    update_db_schema() # Keep schema update for robustness
+    update_db_schema() 
     app.run(host='0.0.0.0', port=5000, debug=True)

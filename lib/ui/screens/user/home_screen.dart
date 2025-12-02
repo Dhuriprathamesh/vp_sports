@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import 'sports_details.dart'; 
 import 'leaderboard_screen.dart'; 
+import 'user_schedule_screen.dart'; // Import the dedicated User Schedule Screen
 import '../../widgets/live_matches_carousel.dart'; 
 
 class HomeScreen extends StatelessWidget {
@@ -334,14 +335,22 @@ class _HomeScreenViewState extends State<_HomeScreenView>
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, index) {
               final sport = sports[index];
+              final String? sportName = sport['name'];
+              final IconData? sportIcon = sport['icon'];
+
+              if (sportName == null) return const SizedBox();
+
+              // Get the background image asset for this sport
+              final String? bgImage = _getAssetImage(sportName);
+
               return FadeInAnimation(
                 delay: Duration(milliseconds: 150 + index * 60),
                 child: _SportCard(
-                  name: sport['name'],
-                  icon: sport['icon'],
+                  name: sportName,
+                  icon: sportIcon!,
                   iconColor: iconColor,
-                  backgroundImage: _getAssetImage(sport['name']),
-                  onTap: () => _navigateToDetails(context, sport['name'], sport['icon']),
+                  backgroundImage: bgImage, // Pass the image here
+                  onTap: () => _navigateToDetails(context, sportName, sportIcon),
                 ),
               );
             },
@@ -351,40 +360,48 @@ class _HomeScreenViewState extends State<_HomeScreenView>
     );
   }
 
-  // --- DYNAMIC SPORT LIST LOGIC ---
-  List<Map<String, dynamic>> _getOutdoorSports() {
-    List<Map<String, dynamic>> list = [
-        {'name': 'Cricket', 'icon': Icons.sports_cricket},
-        {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
-        {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
-        {'name': 'Athletics', 'icon': Icons.directions_run},
-        {'name': 'Basketball', 'icon': Icons.sports_basketball}, 
-    ];
-
-    // Conditional insertion: Football for Boys, Dodgeball for Girls
+  // --- Helper to Map Sport Name to Asset Image ---
+  String? _getAssetImage(String sportName) {
     if (widget.isForBoys) {
-       list.insert(1, {'name': 'Football', 'icon': Icons.sports_soccer});
+      return _getBoysAssetImage(sportName);
     } else {
-       list.insert(1, {'name': 'Dodgeball', 'icon': Icons.sports_handball}); // Uses Handball icon for Dodgeball
+      return _getGirlsAssetImage(sportName);
     }
-    
-    return list;
   }
 
-  List<Map<String, dynamic>> _getIndoorSports() => [
-        {'name': 'Chess', 'icon': Icons.gamepad_outlined},
-        {'name': 'Table Tennis', 'icon': Icons.sports_tennis}, 
-        {'name': 'Carrom', 'icon': Icons.album},
-        {'name': 'Badminton', 'icon': Icons.filter_vintage}, 
-      ];
-
-  String? _getAssetImage(String sportName) {
+  // Function to get images for Boys' sports
+  String? _getBoysAssetImage(String sportName) {
     switch (sportName) {
       case 'Cricket': return 'assets/cricket.png';
       case 'Football': return 'assets/football.png';
       case 'Volleyball': return 'assets/volleyball.png';
       case 'Kabaddi': return 'assets/kabaddi.jpeg';
-      // No specific asset for Dodgeball, will use default card style
+      case 'Basketball': return 'assets/basketball.jpg';
+      case 'Athletics': return 'assets/athletics.png';
+      case 'Chess': return 'assets/chess.jpg';
+      case 'Carrom': return 'assets/carrom.jpg';
+      case 'Table Tennis': return 'assets/table_tennis.png';
+      case 'Badminton': return 'assets/badminton.png';
+      default: return null;
+    }
+  }
+
+  // Function to get images for Girls' sports
+  // -------------------------------------------------------------
+  // UPDATE THESE PATHS TO USE YOUR GIRLS-SPECIFIC IMAGES
+  // -------------------------------------------------------------
+  String? _getGirlsAssetImage(String sportName) {
+    switch (sportName) {
+      case 'Cricket': return 'assets/girls_cricket.png'; // Updated
+      case 'Dodgeball': return 'assets/dodgeball.png';
+      case 'Volleyball': return 'assets/girls_volleyball.png'; // Updated
+      case 'Kabaddi': return 'assets/girls_kabaddi.jpeg'; // Updated
+      case 'Basketball': return 'assets/girls_basketball.jpg'; // Updated
+      case 'Athletics': return 'assets/girls_athletics.png'; // Updated
+      case 'Chess': return 'assets/girls_chess.jpg'; // Updated
+      case 'Carrom': return 'assets/girls_carrom.jpg'; // Updated
+      case 'Table Tennis': return 'assets/girls_table_tennis.png'; // Updated
+      case 'Badminton': return 'assets/girls_badminton.png'; // Updated
       default: return null;
     }
   }
@@ -412,19 +429,46 @@ class _HomeScreenViewState extends State<_HomeScreenView>
     return BottomNavigationBar(
       currentIndex: _bottomNavIndex,
       onTap: (index) {
-        if (index == 2) {
+        if (index == 1) { // SCHEDULE PAGE
           Navigator.of(context).push(MaterialPageRoute(
-              builder: (context) => LeaderboardScreen(isForBoys: widget.isForBoys)));
+              builder: (context) => UserScheduleScreen(isForBoys: widget.isForBoys)));
+        } else if (index == 2) {
+          // Leaderboard is at index 2
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  LeaderboardScreen( // FIXED: Using user version
+                isForBoys: widget.isForBoys,
+                // Removed onGenderToggle as LeaderboardScreen does not accept it
+              ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                const begin = Offset(0.0, 1.0);
+                const end = Offset.zero;
+                const curve = Curves.ease;
+                final tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: curve));
+                return SlideTransition(
+                  position: animation.drive(tween),
+                  child: child,
+                );
+              },
+            ),
+          );
         } else if (index == 3) {
           widget.onGenderToggle(!widget.isForBoys);
         } else {
-          setState(() => _bottomNavIndex = index);
+          setState(() {
+            _bottomNavIndex = index;
+          });
         }
       },
       items: [
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        const BottomNavigationBarItem(icon: Icon(Icons.schedule), label: 'Schedule'),
-        const BottomNavigationBarItem(icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.schedule), label: 'Schedule'),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
         BottomNavigationBarItem(
           icon: Icon(widget.isForBoys ? Icons.male : Icons.female),
           label: widget.isForBoys ? 'Boys' : 'Girls',
@@ -432,19 +476,118 @@ class _HomeScreenViewState extends State<_HomeScreenView>
       ],
     );
   }
-}
 
-class FadeInAnimation extends StatelessWidget {
-  final Widget child;
-  final Duration delay;
-  const FadeInAnimation({required this.child, this.delay = Duration.zero, super.key});
-  
-  @override
-  Widget build(BuildContext context) {
-    return child; 
+  // --- DYNAMIC SPORT LIST LOGIC ---
+  List<Map<String, dynamic>> _getOutdoorSports() {
+    return widget.isForBoys ? _getBoysOutdoorSports() : _getGirlsOutdoorSports();
+  }
+
+  List<Map<String, dynamic>> _getIndoorSports() {
+    return widget.isForBoys ? _getBoysIndoorSports() : _getGirlsIndoorSports();
+  }
+
+  // --- Separate Functions for Boys ---
+  List<Map<String, dynamic>> _getBoysOutdoorSports() {
+    return [
+      {'name': 'Cricket', 'icon': Icons.sports_cricket},
+      {'name': 'Football', 'icon': Icons.sports_soccer},
+      {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+      {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+      {'name': 'Athletics', 'icon': Icons.directions_run},
+      {'name': 'Basketball', 'icon': Icons.sports_basketball},
+    ];
+  }
+
+  List<Map<String, dynamic>> _getBoysIndoorSports() {
+    return [
+      {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+      {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
+      {'name': 'Carrom', 'icon': Icons.album},
+      {'name': 'Badminton', 'icon': Icons.filter_vintage},
+    ];
+  }
+
+  // --- Separate Functions for Girls ---
+  List<Map<String, dynamic>> _getGirlsOutdoorSports() {
+    return [
+      {'name': 'Cricket', 'icon': Icons.sports_cricket},
+      {'name': 'Dodgeball', 'icon': Icons.sports_handball},
+      {'name': 'Volleyball', 'icon': Icons.sports_volleyball},
+      {'name': 'Kabaddi', 'icon': Icons.sports_kabaddi},
+      {'name': 'Athletics', 'icon': Icons.directions_run},
+      {'name': 'Basketball', 'icon': Icons.sports_basketball},
+    ];
+  }
+
+  List<Map<String, dynamic>> _getGirlsIndoorSports() {
+    return [
+      {'name': 'Chess', 'icon': Icons.gamepad_outlined},
+      {'name': 'Table Tennis', 'icon': Icons.sports_tennis},
+      {'name': 'Carrom', 'icon': Icons.album},
+      {'name': 'Badminton', 'icon': Icons.filter_vintage},
+    ];
   }
 }
 
+class FadeInAnimation extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+
+  const FadeInAnimation(
+      {required this.child, this.delay = Duration.zero, super.key});
+
+  @override
+  State<FadeInAnimation> createState() => _FadeInAnimationState();
+}
+
+class _FadeInAnimationState extends State<FadeInAnimation>
+    with TickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacityAnimation;
+  late final Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+
+    Future.delayed(widget.delay, () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// --- Shared Sport Card Component ---
 class _SportCard extends StatelessWidget {
   final String name;
   final IconData icon;
@@ -464,28 +607,48 @@ class _SportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.15),
       borderRadius: BorderRadius.circular(16),
       color: Colors.white,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
+        splashColor: iconColor.withOpacity(0.2),
+        highlightColor: iconColor.withOpacity(0.1),
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Background Image logic
             if (backgroundImage != null)
               Opacity(
                 opacity: 0.3,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(backgroundImage!, fit: BoxFit.cover, errorBuilder: (c,e,s) => const SizedBox()),
+                  child: Image.asset(
+                    backgroundImage!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback safely if image is missing
+                      return const SizedBox();
+                    },
+                  ),
                 ),
               ),
+
+            // Foreground Content
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(icon, size: 40, color: iconColor),
                 const SizedBox(height: 10),
-                Text(name, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[800])),
+                Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                ),
               ],
             ),
           ],
