@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
+import 'dart:ui'; // Required for BackdropFilter
 import '../../../core/app_theme.dart';
-// import 'dart:math'; // Removed unused import
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async'; // For debounce
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/api_constants.dart'; // Import ApiConstants
 
-// --- ADD THESE IMPORTS ---
+// --- FILE & PERMISSION IMPORTS ---
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:permission_handler/permission_handler.dart';
-// --- ADD CONDITIONAL WEB IMPORT ---
+// --- CONDITIONAL WEB IMPORT ---
 import 'package:universal_html/html.dart' as html;
 
+import '../common/six_animation_widget.dart'; 
+import '../common/four_animation_widget.dart'; 
+import '../common/wicket_animation_widget.dart'; 
+import '../common/goal_animation_widget.dart'; 
 
-// Player class (no changes needed for JSON mapping)
+// Player class
 class Player {
   final int id;
   final String name;
@@ -27,42 +31,35 @@ class Player {
   int ballsBowled = 0;
   int runsConceded = 0;
   int wicketsTaken = 0;
-  int maidens = 0; // Currently not tracked/sent in detail
+  int maidens = 0; 
   Player({required this.id, required this.name});
   String getBowlerFigures() { int overs = ballsBowled ~/ 6; int ballsPart = ballsBowled % 6; return "$wicketsTaken/$runsConceded ($overs.$ballsPart)"; }
   String getBatsmanScore() { return "$runs ($ballsFaced)"; }
 
-  // Method to convert Player object to a Map for JSON serialization
   Map<String, dynamic> toJson(String currentStatus, Player? currentStriker, Player? currentNonStriker) {
      String status = "Yet to bat";
-     // Determine batting status based on current state
      if (id == currentStriker?.id || id == currentNonStriker?.id) {
        status = "Not Out";
      } else if (isOut) {
        status = dismissalInfo.isNotEmpty ? dismissalInfo : "Out";
      } else if (ballsFaced > 0 || runs > 0) {
-        // Only mark as 'Out' if they actually batted and are not current
         status = dismissalInfo.isNotEmpty ? dismissalInfo : "Out";
      } else if(currentStatus == 'finished' && !isOut && ballsFaced == 0 && runs == 0) {
-       // If match finished and player didn't bat, keep as "Yet to bat"
        status = "Yet to bat";
      }
-
 
      return {
        "id": id,
        "name": name,
        "runs": runs,
        "ballsFaced": ballsFaced,
-       "status": status, // Use calculated status
+       "status": status, 
        "ballsBowled": ballsBowled,
        "runsConceded": runsConceded,
        "wicketsTaken": wicketsTaken,
-       // Maidens not included in JSON currently
      };
    }
 
-   // Optional: Factory constructor to create Player from JSON (useful for loading)
    factory Player.fromJson(Map<String, dynamic> json) {
      Player player = Player(id: json['id'], name: json['name']);
      player.runs = json['runs'] ?? 0;
@@ -73,7 +70,6 @@ class Player {
      player.ballsBowled = json['ballsBowled'] ?? 0;
      player.runsConceded = json['runsConceded'] ?? 0;
      player.wicketsTaken = json['wicketsTaken'] ?? 0;
-     // Maidens not loaded currently
      return player;
    }
 }
@@ -97,6 +93,16 @@ enum ExtraType { Wide, NoBall, LegBye, Bye }
 
 
 class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
+
+  // --- ANIMATION CONTROLLERS ---
+  final StreamController<bool> _sixAnimationTrigger = StreamController<bool>.broadcast();
+  final StreamController<bool> _fourAnimationTrigger = StreamController<bool>.broadcast();
+  final StreamController<bool> _wicketAnimationTrigger = StreamController<bool>.broadcast();
+  final StreamController<String> _goalAnimationTrigger = StreamController<String>.broadcast();
+
+  // --- BLUR STATE ---
+  bool _isAnimationPlaying = false;
+  Timer? _blurTimer;
 
   Player? _striker;
   Player? _nonStriker;
@@ -127,14 +133,37 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
   @override
   void initState() { super.initState(); _fetchMatchPlayers(); }
+  
   @override
-  void dispose() { _debounceTimer?.cancel(); super.dispose(); }
+  void dispose() { 
+    _debounceTimer?.cancel();
+    // --- Cancel Animation Streams ---
+    _blurTimer?.cancel();
+    _sixAnimationTrigger.close();
+    _fourAnimationTrigger.close();
+    _wicketAnimationTrigger.close();
+    _goalAnimationTrigger.close();
+    super.dispose(); 
+  }
 
-  // Fetch player lists and MAX OVERS
+  // --- ANIMATION HELPER ---
+  void _triggerBlurEffect() {
+    setState(() {
+      _isAnimationPlaying = true;
+    });
+    _blurTimer?.cancel();
+    _blurTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isAnimationPlaying = false;
+        });
+      }
+    });
+  }
+
   Future<void> _fetchMatchPlayers() async {
      setState(() { _isLoadingPlayers = true; _playerFetchError = ''; });
     try {
-      // --- FIX: Use ApiConstants ---
       final response = await http.get( Uri.parse('${ApiConstants.baseUrl}/api/get_match_details/${widget.matchId}'));
       if (mounted) {
         if (response.statusCode == 200) {
@@ -147,7 +176,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
             var oversRaw = matchDetails['overs_per_innings'];
             _maxOvers = (oversRaw is num) ? oversRaw.toInt() : 20;
-            _isLoadingPlayers = false; // Mark as done initially
+            _isLoadingPlayers = false; 
           });
           await _loadExistingLiveState();
         } else {
@@ -159,21 +188,17 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     }
   }
 
-  // Load Existing State from Backend
   Future<void> _loadExistingLiveState() async {
-     setState(() => _isLoadingPlayers = true); // Show loading indicator while fetching state
+     setState(() => _isLoadingPlayers = true); 
      
-     // --- FIX: Use ApiConstants ---
      final String apiUrl = '${ApiConstants.baseUrl}/api/get_live_score/${widget.matchId}'; 
-     // ------------------------------------------------------------------------
-
+     
      try {
         final response = await http.get(Uri.parse(apiUrl));
         if (mounted && response.statusCode == 200) {
             final loadedData = json.decode(response.body);
-             _lastSentState = loadedData; // Store the raw loaded state
+             _lastSentState = loadedData; 
 
-            // Helper to find a player in the fetched lists by ID
             Player? findFetchedPlayerById(int? playerId) {
                 if (playerId == null) return null;
                 try {
@@ -186,7 +211,6 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                 return null;
             }
 
-            // Helper to update local Player object from JSON stats
             void updateLocalPlayerStatsFromJson(int playerId, Map<String, dynamic> stats) {
                 Player? player = findFetchedPlayerById(playerId);
                 if (player != null) {
@@ -199,28 +223,22 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                     player.runsConceded = stats['runsConceded'] ?? 0;
                     player.wicketsTaken = stats['wicketsTaken'] ?? 0;
 
-                    // Add to dismissed list if loaded as out and not already present
                     if (player.isOut && !_dismissedBatsmen.any((p) => p.id == player.id)) {
                        _dismissedBatsmen.add(player);
                     }
-                    // Add to bowlers used list if loaded with balls bowled and not already present
                      if (player.ballsBowled > 0 && !_bowlersUsed.any((p) => p.id == player.id)) {
                        _bowlersUsed.add(player);
                     }
-                } else {
-                     print("Load State Warning: Could not find local player object for ID $playerId to update stats.");
                 }
             }
 
 
             setState(() {
-                // Load core match state
                 _tossWinner = loadedData['toss_winner'];
                 _tossDecision = loadedData['toss_decision'] == 'Bat' ? TossDecision.Bat : (loadedData['toss_decision'] == 'Bowl' ? TossDecision.Bowl : null);
                 _matchStatusText = loadedData['current_status'] ?? "Live";
                 _summaryText = loadedData['summary_text'] ?? "Match in progress.";
                 
-                // --- FIX: Handle Integer vs Boolean mismatch for is_first_innings ---
                 if (loadedData['is_first_innings'] != null) {
                     if (loadedData['is_first_innings'] is bool) {
                        _isFirstInnings = loadedData['is_first_innings'];
@@ -236,58 +254,47 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                 _teamARuns = loadedData['team1_runs'] ?? 0; _teamAWickets = loadedData['team1_wickets'] ?? 0; _teamABalls = loadedData['team1_balls'] ?? 0;
                 _teamBRuns = loadedData['team2_runs'] ?? 0; _teamBWickets = loadedData['team2_wickets'] ?? 0; _teamBBalls = loadedData['team2_balls'] ?? 0;
 
-                // Load timelines
                 _team1Timeline = List<String>.from(loadedData['team1_timeline'] ?? []);
                 _team2Timeline = List<String>.from(loadedData['team2_timeline'] ?? []);
 
-                // Determine batting/bowling team based on loaded state
                  if (_tossWinner != null && _tossDecision != null) {
                     bool teamABatsFirst = (_tossWinner == widget.teamAName && _tossDecision == TossDecision.Bat) || (_tossWinner == widget.teamBName && _tossDecision == TossDecision.Bowl);
                     if (_isFirstInnings) { _battingTeamName = teamABatsFirst ? widget.teamAName : widget.teamBName; _bowlingTeamName = teamABatsFirst ? widget.teamBName : widget.teamAName; }
                     else { _battingTeamName = teamABatsFirst ? widget.teamBName : widget.teamAName; _bowlingTeamName = teamABatsFirst ? widget.teamAName : widget.teamBName; }
                  } else { _battingTeamName = ""; _bowlingTeamName = ""; }
 
-                 // Find and assign current players
                  _striker = findFetchedPlayerById(loadedData['striker_id']);
                  _nonStriker = findFetchedPlayerById(loadedData['non_striker_id']);
                  _currentBowler = findFetchedPlayerById(loadedData['bowler_id']);
 
-                 // Load extras for the correct team
                  if (_battingTeamName.isNotEmpty) {
                     _extras = (_battingTeamName == widget.teamAName) ? (loadedData['team1_extras'] ?? 0) : (loadedData['team2_extras'] ?? 0);
                  } else { _extras = 0; }
 
-                // --- Parse JSONB player stats ---
-                // Ensure the loaded data is treated as List<dynamic>
                 List<dynamic> team1BatStats = loadedData['team1_batting'] ?? [];
                 List<dynamic> team2BowlStats = loadedData['team2_bowling'] ?? [];
                 List<dynamic> team2BatStats = loadedData['team2_batting'] ?? [];
                 List<dynamic> team1BowlStats = loadedData['team1_bowling'] ?? [];
 
-                // Reset dismissed/bowlers lists before reloading from stats
                 _dismissedBatsmen.clear();
                 _bowlersUsed.clear();
 
-                // Update local player objects
                 for (var stats in team1BatStats) { if (stats is Map<String, dynamic> && stats['id'] != null) updateLocalPlayerStatsFromJson(stats['id'], stats); }
                 for (var stats in team2BowlStats) { if (stats is Map<String, dynamic> && stats['id'] != null) updateLocalPlayerStatsFromJson(stats['id'], stats); }
                 for (var stats in team2BatStats) { if (stats is Map<String, dynamic> && stats['id'] != null) updateLocalPlayerStatsFromJson(stats['id'], stats); }
                 for (var stats in team1BowlStats) { if (stats is Map<String, dynamic> && stats['id'] != null) updateLocalPlayerStatsFromJson(stats['id'], stats); }
 
 
-                 // --- Calculate current over/ball ---
                  int currentInningsBalls = (_battingTeamName == widget.teamAName) ? _teamABalls : _teamBBalls;
-                 if (currentInningsBalls >= 0) { // Check >= 0 instead of > 0
+                 if (currentInningsBalls >= 0) { 
                     _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                     _currentBallNumberInOver = (currentInningsBalls % 6) + 1;
 
                     if (currentInningsBalls > 0 && currentInningsBalls % 6 == 0) {
-                         // Over just finished. Next ball is start of new over.
                          _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                          _currentBallNumberInOver = 1;
-                         _ballsThisOverDisplay = []; // Clear display for new over
+                         _ballsThisOverDisplay = []; 
                     } else {
-                         // Over is in progress
                          _currentOverNumber = (currentInningsBalls ~/ 6) + 1;
                          _currentBallNumberInOver = (currentInningsBalls % 6) + 1;
                     }
@@ -295,17 +302,15 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
 
                  } else { _currentOverNumber = 1; _currentBallNumberInOver = 1; }
 
-                 // Determine current phase based on loaded data
                  if (_matchStatusText == 'finished') {
                    _currentPhase = ScoringPhase.finished;
                  } else if (_matchStatusText == 'upcoming') _currentPhase = ScoringPhase.preMatch;
                  else if (loadedData['break_status'] != null) _currentPhase = ScoringPhase.inningsBreak;
                  else if (_tossWinner != null && _striker == null && _nonStriker == null && _currentBowler == null && _matchStatusText == 'live') _currentPhase = ScoringPhase.selectPlayers;
-                 else if (_tossWinner == null) _currentPhase = ScoringPhase.preMatch; // Still waiting for toss
+                 else if (_tossWinner == null) _currentPhase = ScoringPhase.preMatch; 
                  else if (_isFirstInnings) _currentPhase = ScoringPhase.innings1;
                  else _currentPhase = ScoringPhase.innings2;
 
-                 // Update summary text based on loaded state and calculated phase
                  if (_currentPhase == ScoringPhase.innings2 && _targetScore > 0) {
                       int currentBattingRuns = (_battingTeamName == widget.teamAName) ? _teamARuns : _teamBRuns;
                       int runsNeeded = _targetScore - currentBattingRuns;
@@ -316,67 +321,57 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                       ballsRemaining = ballsRemaining < 0 ? 0 : ballsRemaining;
                       _summaryText = "$_battingTeamName need $runsNeeded runs from $ballsRemaining balls.";
                  } else if (_currentPhase == ScoringPhase.finished || _currentPhase == ScoringPhase.matchEnd) {
-                      _summaryText = loadedData['live_result'] ?? _summaryText; // Use final result if available
+                      _summaryText = loadedData['live_result'] ?? _summaryText; 
                  } else if (_currentPhase == ScoringPhase.inningsBreak && _targetScore > 0){
-                      // Determine who batted first MORE reliably
                       String teamBattedFirstName = "";
                        if (_tossWinner != null && _tossDecision != null) {
                          bool teamABatsFirstLoad = (_tossWinner == widget.teamAName && _tossDecision == TossDecision.Bat) || (_tossWinner == widget.teamBName && _tossDecision == TossDecision.Bowl);
                          teamBattedFirstName = teamABatsFirstLoad ? widget.teamAName : widget.teamBName;
                        } else {
-                         // Fallback if toss info missing somehow (shouldn't happen)
                          teamBattedFirstName = _isFirstInnings ? _battingTeamName : _bowlingTeamName;
                        }
 
                       String teamToChaseName = (teamBattedFirstName == widget.teamAName) ? widget.teamBName : widget.teamAName;
                       String inningsLimitDisplay = _formatOversLimit(_firstInningsValidBallsBowled);
-                      // --- FIX IS HERE: Use teamToChaseName instead of teamToChase ---
                       _summaryText = "End of 1st Innings. Target for $teamToChaseName: $_targetScore in $inningsLimitDisplay overs";
 
                  } else if (_currentPhase == ScoringPhase.selectPlayers && _tossWinner != null) {
-                     String decisionStr = _tossDecision == TossDecision.Bat ? "bat" : "bowl";
-                     _summaryText = "$_tossWinner won the toss and chose to $decisionStr.";
+                      String decisionStr = _tossDecision == TossDecision.Bat ? "bat" : "bowl";
+                      _summaryText = "$_tossWinner won the toss and chose to $decisionStr.";
                  } else if (_currentPhase == ScoringPhase.preMatch && _tossWinner == null) {
-                     _summaryText = "Toss will happen soon.";
+                      _summaryText = "Toss will happen soon.";
                  } else if ((_currentPhase == ScoringPhase.innings1 || _currentPhase == ScoringPhase.innings2) && currentInningsBalls == 0) {
-                      // If starting innings 1 or 2 with 0 balls bowled
-                     _summaryText = "$_battingTeamName is batting.";
+                      _summaryText = "$_battingTeamName is batting.";
                  }
 
             });
         } else if (mounted && response.statusCode == 404) {
-            print("No existing live update data found for match ${widget.matchId}. Starting fresh.");
-             // Check actual match status to decide phase
-             // --- FIX: Use ApiConstants ---
              final statusResponse = await http.get(Uri.parse('${ApiConstants.baseUrl}/api/get_match_details/${widget.matchId}'));
              if (mounted && statusResponse.statusCode == 200) {
                  final details = json.decode(statusResponse.body);
                  setState(() {
-                      _matchStatusText = details['match_status'] ?? 'upcoming';
-                      if (_matchStatusText == 'live') {
-                        _currentPhase = ScoringPhase.preMatch; // Match started, but no scoring yet -> go to toss
-                      } else if (_matchStatusText == 'finished') _currentPhase = ScoringPhase.finished;
-                      else _currentPhase = ScoringPhase.preMatch; // Still upcoming
+                       _matchStatusText = details['match_status'] ?? 'upcoming';
+                       if (_matchStatusText == 'live') {
+                         _currentPhase = ScoringPhase.preMatch; 
+                       } else if (_matchStatusText == 'finished') _currentPhase = ScoringPhase.finished;
+                       else _currentPhase = ScoringPhase.preMatch; 
                  });
-             } else { setState(() => _currentPhase = ScoringPhase.preMatch); } // Default to preMatch if details fail
+             } else { setState(() => _currentPhase = ScoringPhase.preMatch); } 
         } else if (mounted) {
              _playerFetchError = 'Failed to load existing live state (${response.statusCode}). Starting fresh.';
-             setState(() => _currentPhase = ScoringPhase.preMatch); print("$_playerFetchError Body: ${response.body}");
+             setState(() => _currentPhase = ScoringPhase.preMatch); 
         }
      } catch(e) {
          if (mounted) { _playerFetchError = 'Error connecting to load live state. Starting fresh.'; setState(() => _currentPhase = ScoringPhase.preMatch); print("Error loading live state: $e"); }
      } finally {
-         if (mounted) setState(() => _isLoadingPlayers = false); // Stop loading indicator
+         if (mounted) setState(() => _isLoadingPlayers = false); 
      }
   }
 
-  // Send Score Update to Backend
   Future<void> _sendScoreUpdateToBackend() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
-    print("Sending update for phase: $_currentPhase");
 
-    // --- FIX: Use ApiConstants ---
     final String apiUrl = '${ApiConstants.baseUrl}/api/update_live_score/${widget.matchId}';
 
     List<Map<String, dynamic>> team1BattingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
@@ -385,18 +380,17 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     List<Map<String, dynamic>> team1BowlingData = _fetchedTeamAPlayers.map((p) => p.toJson(_matchStatusText, _striker, _nonStriker)).toList();
 
 
-    // Determine current extras based on last sent state (or 0 if none)
     int currentTeam1Extras = _lastSentState?['team1_extras'] ?? 0;
     int currentTeam2Extras = _lastSentState?['team2_extras'] ?? 0;
     if (_battingTeamName == widget.teamAName) {
-        currentTeam1Extras = _extras; // Update Team 1's extras
+        currentTeam1Extras = _extras; 
     } else if (_battingTeamName == widget.teamBName) {
-        currentTeam2Extras = _extras; // Update Team 2's extras
+        currentTeam2Extras = _extras; 
     }
 
     final Map<String, dynamic> payload = {
         "toss_winner": _tossWinner,
-        "toss_decision": _tossDecision?.toString().split('.').last, // "Bat" or "Bowl"
+        "toss_decision": _tossDecision?.toString().split('.').last, 
         "current_status": _matchStatusText,
         "live_result": (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) ? _summaryText : null,
         "break_status": _currentPhase == ScoringPhase.inningsBreak ? "Innings Break" : null,
@@ -404,42 +398,39 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
         "team2_name": widget.teamBName,
         "team1_runs": _teamARuns, "team1_wickets": _teamAWickets, "team1_balls": _teamABalls,
         "team2_runs": _teamBRuns, "team2_wickets": _teamBWickets, "team2_balls": _teamBBalls,
-        "team1_extras": currentTeam1Extras, // Send updated extras count
-        "team2_extras": currentTeam2Extras, // Send updated extras count
+        "team1_extras": currentTeam1Extras, 
+        "team2_extras": currentTeam2Extras, 
         "summary_text": _summaryText,
         "striker_id": _striker?.id,
         "non_striker_id": _nonStriker?.id,
         "bowler_id": _currentBowler?.id,
         "is_first_innings": _isFirstInnings,
-        "target_score": _targetScore > 0 ? _targetScore : null, // Send null if not set
-        "first_innings_balls": _firstInningsValidBallsBowled > 0 ? _firstInningsValidBallsBowled : null, // Send null if not set
+        "target_score": _targetScore > 0 ? _targetScore : null, 
+        "first_innings_balls": _firstInningsValidBallsBowled > 0 ? _firstInningsValidBallsBowled : null, 
         "team1_timeline": _team1Timeline,
         "team2_timeline": _team2Timeline,
-        // Send the JSON lists
         "team1_batting": team1BattingData,
         "team2_bowling": team2BowlingData,
         "team2_batting": team2BattingData,
         "team1_bowling": team1BowlingData,
     };
-     _lastSentState = payload; // Keep track of the last sent state
+     _lastSentState = payload; 
 
     try {
       final response = await http.post(
           Uri.parse(apiUrl),
           headers: {'Content-Type': 'application/json; charset=UTF-8'},
-          body: json.encode(payload), // Encode the payload as JSON
+          body: json.encode(payload), 
       );
       if (mounted) {
           if (response.statusCode == 200) {
-            print('Score update sent successfully.');
+            // Success
           } else {
-            print('Error sending score update: ${response.statusCode} ${response.body}');
             ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text('Error saving update: ${response.statusCode}'), backgroundColor: Colors.orange),);
           }
       }
     } catch (e) {
         if (mounted) {
-          print('Failed to connect to server for score update: $e');
           ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Connection error saving update.'), backgroundColor: Colors.red),);
         }
     } finally {
@@ -447,40 +438,31 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
     }
   }
 
- // Debounce function
   void _debounceAndSendUpdate() {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 800), () {
-        // Only send if not currently saving
         if (!_isSaving) {
             _sendScoreUpdateToBackend();
-        } else {
-            print("Debouncer skipped send: Already saving.");
         }
     });
  }
 
-  // Format overs (e.g., (2.1))
   String _formatOvers(int validBalls) {
     int overs = validBalls ~/ 6;
     int remainingBalls = validBalls % 6;
     return "($overs.$remainingBalls)";
   }
 
-  // Format overs limit (e.g., 2.0)
   String _formatOversLimit(int validBalls) { if (validBalls <= 0) return "0.0"; int overs = validBalls ~/ 6; int remainingBalls = validBalls % 6; if (remainingBalls == 0 && overs >= 0) {
     return "$overs.0";
   } else if (overs == 0) return "0.$remainingBalls"; else return "$overs.$remainingBalls"; }
 
-  // Swap strike
   void _swapStrike() { final temp = _striker; _striker = _nonStriker; _nonStriker = temp; }
 
-  // Handle Ball Completion
   void _handleBallCompletion(String ballOutcomeDisplay, {bool countsAsBall = true, int runsScored = 0, bool isExtra = false, int extraRuns = 0, ExtraType? extraType}) {
       if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return;
       _ballsThisOverDisplay.add(ballOutcomeDisplay);
 
-      // Add to correct timeline
       if (_battingTeamName == widget.teamAName) {
         _team1Timeline.add(ballOutcomeDisplay);
       } else if (_battingTeamName == widget.teamBName) {
@@ -502,19 +484,18 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
       if (countsAsBall) { if (_currentBallNumberInOver >= 6) { isOverComplete = true; } else { _currentBallNumberInOver++; } if (!_isFirstInnings && _firstInningsValidBallsBowled > 0) { if (currentBallsBowledSecondInnings >= _firstInningsValidBallsBowled) { maxBallsReachedSecondInnings = true; } } }
       if (shouldSwap && !isOverComplete) _swapStrike();
 
-      // *** Refined End Condition Logic Order & Dead Code Fix ***
       bool matchEndedThisBall = false;
       if (targetReached) {
           _summaryText = "$_battingTeamName won the match.";
           _currentPhase = ScoringPhase.matchEnd;
-           _matchStatusText = "Finished"; // Update status
+           _matchStatusText = "Finished"; 
           matchEndedThisBall = true;
       } else if (maxBallsReachedSecondInnings) {
           String bowlingTeamName = (_battingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName;
           if (currentBattingTeamRuns < _targetScore - 1) { int runsMargin = (_targetScore - 1) - currentBattingTeamRuns; _summaryText = "$bowlingTeamName won by $runsMargin runs."; }
           else if (currentBattingTeamRuns == _targetScore - 1) { _summaryText = "Match Tied."; }
           _currentPhase = ScoringPhase.matchEnd;
-           _matchStatusText = "Finished"; // Update status
+           _matchStatusText = "Finished"; 
           if (_battingTeamName == widget.teamAName) {
             _teamABalls = _firstInningsValidBallsBowled;
           } else {
@@ -523,12 +504,10 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
           matchEndedThisBall = true;
       }
 
-      // Only handle over completion or summary update if the match didn't end on this ball
       if (!matchEndedThisBall) {
           if (isOverComplete) {
-              _handleOverComplete(); // Normal over completion
+              _handleOverComplete(); 
           }
-           // *** Corrected: Update summary text *unless* over is complete (handled in _handleOverComplete) ***
           else if (!_isFirstInnings && _targetScore != -1) {
               int runsNeeded = _targetScore - currentBattingTeamRuns;
               int maxBallsForChase = _firstInningsValidBallsBowled > 0 ? _firstInningsValidBallsBowled : _maxOvers * 6;
@@ -539,32 +518,47 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
               _summaryText = "$_battingTeamName need $runsNeeded runs from $ballsRemaining balls.";
           }
       }
-      // If the match ended this ball AND it was the 6th ball, call handleOverComplete with flag
-      else if (isOverComplete) { // FIXED: Removed redundant 'matchEndedThisBall' check
+      else if (isOverComplete) {
            _handleOverComplete(matchJustEnded: true);
       }
    }
 
-  // Record Run
-  void _recordRun(int runs) { if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return; _handleBallCompletion(runs.toString(), runsScored: runs); _debounceAndSendUpdate(); setState(() {}); }
+  void _recordRun(int runs) { 
+    if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return;
+    
+    // --- TRIGGER ANIMATIONS & BLUR ---
+    if (runs == 6) {
+      _sixAnimationTrigger.add(true);
+      _triggerBlurEffect();
+    } else if (runs == 4) {
+      _fourAnimationTrigger.add(true);
+      _triggerBlurEffect();
+    }
+    
+    _handleBallCompletion(runs.toString(), runsScored: runs); 
+    _debounceAndSendUpdate(); 
+    setState(() {}); 
+  }
 
-  // Prompt for Extra Runs
   Future<int?> _promptForExtraRuns(BuildContext context, ExtraType extraType) async { String title = ''; List<int> possibleRuns = [0, 1, 2, 3, 4, 6]; switch(extraType) { case ExtraType.Wide: title = 'Runs run on Wide?'; possibleRuns = [0, 1, 2, 3, 4]; break; case ExtraType.NoBall: title = 'Runs scored off No Ball? (off bat)'; break; case ExtraType.LegBye: title = 'Leg Byes taken?'; possibleRuns = [1, 2, 3, 4]; break; case ExtraType.Bye: title = 'Byes taken?'; possibleRuns = [1, 2, 3, 4]; break; } int? selectedValue = await showDialog<int>( context: context, builder: (BuildContext context) { int? currentlySelected; return AlertDialog( title: Text(title), content: DropdownButton<int>( value: currentlySelected, hint: const Text("Select runs"), items: possibleRuns.map((run) => DropdownMenuItem(value: run, child: Text('$run'))).toList(), onChanged:(value) { currentlySelected = value; Navigator.of(context).pop(currentlySelected); }, ), actions: [ TextButton( onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel'),)]); },); return selectedValue ?? 0; }
 
-  // Record Extra
   void _recordExtra(ExtraType extraType) async { if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return; int baseExtraRuns = 0; int runsScoredOffBat = 0; int runsRunAsExtras = 0; String outcomePrefix = ""; bool countsAsBall = true; int? selectedRuns; switch(extraType) { case ExtraType.Wide: baseExtraRuns = 1; outcomePrefix = "Wd"; countsAsBall = false; selectedRuns = await _promptForExtraRuns(context, extraType); runsRunAsExtras = selectedRuns ?? 0; break; case ExtraType.NoBall: baseExtraRuns = 1; outcomePrefix = "Nb"; countsAsBall = false; selectedRuns = await _promptForExtraRuns(context, extraType); runsScoredOffBat = selectedRuns ?? 0; break; case ExtraType.LegBye: outcomePrefix = "Lb"; countsAsBall = true; selectedRuns = await _promptForExtraRuns(context, extraType); runsRunAsExtras = selectedRuns ?? 0; if (runsRunAsExtras == 0) return; outcomePrefix = "${runsRunAsExtras}Lb"; break; case ExtraType.Bye: outcomePrefix = "B"; countsAsBall = true; selectedRuns = await _promptForExtraRuns(context, extraType); runsRunAsExtras = selectedRuns ?? 0; if (runsRunAsExtras == 0) return; outcomePrefix = "${runsRunAsExtras}B"; break; } String displayOutcome = outcomePrefix; int totalRunsForBall = baseExtraRuns + runsRunAsExtras + runsScoredOffBat; if (extraType == ExtraType.NoBall) {
     displayOutcome = "${totalRunsForBall > 1 ? "$totalRunsForBall" : ""}Nb";
   } else if (extraType == ExtraType.Wide) displayOutcome = "${totalRunsForBall > 1 ? "$totalRunsForBall" : ""}Wd"; _handleBallCompletion( displayOutcome, countsAsBall: countsAsBall, runsScored: runsScoredOffBat, extraRuns: baseExtraRuns + runsRunAsExtras, isExtra: true, extraType: extraType ); _debounceAndSendUpdate(); setState(() {}); }
 
-  // Prompt for Next Batsman
   Future<Player?> _promptForNextBatsman(BuildContext context) async { List<Player> battingTeamPlayers = (_battingTeamName == widget.teamAName) ? _fetchedTeamAPlayers : _fetchedTeamBPlayers; List<Player> availableBatsmen = battingTeamPlayers.where((p) => !p.isOut && p.id != _striker?.id && p.id != _nonStriker?.id).toList(); if (availableBatsmen.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All batsmen are out!"))); return null; } Player? selectedBatsman; return await showDialog<Player>( context: context, barrierDismissible: false, builder: (BuildContext context) { return StatefulBuilder( builder: (context, setDialogState) { return AlertDialog( title: const Text('Select Next Batsman'), content: DropdownButtonFormField<Player>( initialValue: selectedBatsman, hint: const Text("Choose batsman"), items: availableBatsmen.map((p) => DropdownMenuItem( value: p, child: Text(p.name))).toList(), onChanged:(value) { setDialogState(() { selectedBatsman = value; }); },), actions: [ TextButton( onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')), TextButton( onPressed: selectedBatsman == null ? null : () => Navigator.of(context).pop(selectedBatsman), child: const Text('Confirm')),] );});},); }
 
-  // Record Wicket
-  void _recordWicket() async { if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return; bool wicketCountsAsBall = true; int runsOnWicketBall = 0; String dismissalDesc = "Wicket"; Player? dismissedBatsman = _striker; /* TODO: Wicket Dialog */ if (dismissedBatsman == null && _nonStriker == null) return; dismissedBatsman ??= _nonStriker; dismissedBatsman!.isOut = true; dismissedBatsman.dismissalInfo = dismissalDesc; if (!_dismissedBatsmen.any((p) => p.id == dismissedBatsman!.id)) { _dismissedBatsmen.add(dismissedBatsman); } if (_battingTeamName == widget.teamAName) { if (_teamAWickets < 10) _teamAWickets++; } else if (_battingTeamName == widget.teamBName) { if (_teamBWickets < 10) _teamBWickets++; } if(_currentBowler != null) { _currentBowler!.wicketsTaken++; } _handleBallCompletion("W", countsAsBall: wicketCountsAsBall, runsScored: runsOnWicketBall); if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) { _debounceAndSendUpdate(); setState((){}); return; } bool inningsEndedByWickets = (_battingTeamName == widget.teamAName && _teamAWickets >= 10) || (_battingTeamName == widget.teamBName && _teamBWickets >= 10); bool inningsEndedByTarget = !_isFirstInnings && _targetScore != -1 && ((_battingTeamName == widget.teamAName && _teamARuns >= _targetScore) || (_battingTeamName == widget.teamBName && _teamBRuns >= _targetScore)); bool inningsEnded = inningsEndedByWickets || inningsEndedByTarget; Player? nextBatsman; if (!inningsEnded) { nextBatsman = await _promptForNextBatsman(context); if (nextBatsman == null) print("Warning: Wicket recorded, but no next batsman selected."); } setState(() { bool crossed = false; if (dismissedBatsman?.id == _striker?.id) { _striker = crossed ? _nonStriker : nextBatsman; if (crossed) _nonStriker = nextBatsman; } else { _nonStriker = nextBatsman; if(crossed) _swapStrike(); } if (_striker == null && _nonStriker != null) _striker = _nonStriker; if (_striker != null && _nonStriker != null && _striker!.id == _nonStriker!.id) _nonStriker = null; if (_striker == null && _nonStriker == null && nextBatsman != null) _striker = nextBatsman; inningsEnded = (_battingTeamName == widget.teamAName && _teamAWickets >= 10) || (_battingTeamName == widget.teamBName && _teamBWickets >= 10) || inningsEndedByTarget; if (inningsEnded) { if(_isFirstInnings) { _currentPhase = ScoringPhase.inningsBreak; _matchStatusText = "Innings Break"; } // Update status
+  void _recordWicket() async { 
+    if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) return; 
+    
+    // --- TRIGGER WICKET ANIMATION & BLUR ---
+    _wicketAnimationTrigger.add(true);
+    _triggerBlurEffect();
+
+    bool wicketCountsAsBall = true; int runsOnWicketBall = 0; String dismissalDesc = "Wicket"; Player? dismissedBatsman = _striker; /* TODO: Wicket Dialog */ if (dismissedBatsman == null && _nonStriker == null) return; dismissedBatsman ??= _nonStriker; dismissedBatsman!.isOut = true; dismissedBatsman.dismissalInfo = dismissalDesc; if (!_dismissedBatsmen.any((p) => p.id == dismissedBatsman!.id)) { _dismissedBatsmen.add(dismissedBatsman); } if (_battingTeamName == widget.teamAName) { if (_teamAWickets < 10) _teamAWickets++; } else if (_battingTeamName == widget.teamBName) { if (_teamBWickets < 10) _teamBWickets++; } if(_currentBowler != null) { _currentBowler!.wicketsTaken++; } _handleBallCompletion("W", countsAsBall: wicketCountsAsBall, runsScored: runsOnWicketBall); if (_currentPhase == ScoringPhase.matchEnd || _currentPhase == ScoringPhase.finished) { _debounceAndSendUpdate(); setState((){}); return; } bool inningsEndedByWickets = (_battingTeamName == widget.teamAName && _teamAWickets >= 10) || (_battingTeamName == widget.teamBName && _teamBWickets >= 10); bool inningsEndedByTarget = !_isFirstInnings && _targetScore != -1 && ((_battingTeamName == widget.teamAName && _teamARuns >= _targetScore) || (_battingTeamName == widget.teamBName && _teamBRuns >= _targetScore)); bool inningsEnded = inningsEndedByWickets || inningsEndedByTarget; Player? nextBatsman; if (!inningsEnded) { nextBatsman = await _promptForNextBatsman(context); if (nextBatsman == null) print("Warning: Wicket recorded, but no next batsman selected."); } setState(() { bool crossed = false; if (dismissedBatsman?.id == _striker?.id) { _striker = crossed ? _nonStriker : nextBatsman; if (crossed) _nonStriker = nextBatsman; } else { _nonStriker = nextBatsman; if(crossed) _swapStrike(); } if (_striker == null && _nonStriker != null) _striker = _nonStriker; if (_striker != null && _nonStriker != null && _striker!.id == _nonStriker!.id) _nonStriker = null; if (_striker == null && _nonStriker == null && nextBatsman != null) _striker = nextBatsman; inningsEnded = (_battingTeamName == widget.teamAName && _teamAWickets >= 10) || (_battingTeamName == widget.teamBName && _teamBWickets >= 10) || inningsEndedByTarget; if (inningsEnded) { if(_isFirstInnings) { _currentPhase = ScoringPhase.inningsBreak; _matchStatusText = "Innings Break"; } // Update status
  else { _currentPhase = ScoringPhase.matchEnd; _matchStatusText = "Finished"; } // Update status
  if (inningsEndedByTarget) { _summaryText = "$_battingTeamName won the match."; } else { if (_isFirstInnings) { _summaryText = "End of 1st Innings"; } else { int battingTeamRuns = (_battingTeamName == widget.teamAName) ? _teamARuns : _teamBRuns; String bowlingTeamName = (_battingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName; if (battingTeamRuns < _targetScore - 1) { int runsMargin = (_targetScore - 1) - battingTeamRuns; _summaryText = "$bowlingTeamName won by $runsMargin runs."; } else if (battingTeamRuns == _targetScore - 1) { _summaryText = "Match Tied."; } } } } _debounceAndSendUpdate(); }); }
 
-  // Handle Over Complete
   void _handleOverComplete({bool matchJustEnded = false}) {
       if (matchJustEnded) { if (_currentBowler != null && _currentBowler!.ballsBowled > 0 && !_bowlersUsed.any((b) => b.id == _currentBowler!.id)) { _bowlersUsed.add(_currentBowler!); } return; }
       if (_currentBowler != null && _currentBowler!.ballsBowled > 0 && !_bowlersUsed.any((b) => b.id == _currentBowler!.id)) { _bowlersUsed.add(_currentBowler!); }
@@ -587,7 +581,7 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                 setState(() {
                   _currentPhase = ScoringPhase.inningsBreak;
                    _matchStatusText = "Innings Break";
-                 });
+                  });
            } else {
                int battingTeamRuns = (_battingTeamName == widget.teamAName) ? _teamARuns : _teamBRuns;
                String bowlingTeamName = (_battingTeamName == widget.teamAName) ? widget.teamBName : widget.teamAName;
@@ -600,8 +594,8 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
                   _matchStatusText = "Finished";
                 });
            }
-           _debounceAndSendUpdate(); // Send final state after max overs reached
-           return; // Don't proceed to next over logic
+           _debounceAndSendUpdate(); 
+           return; 
       }
 
 
@@ -614,9 +608,65 @@ class _AdminUpdateScoreScreenState extends State<AdminUpdateScoreScreen> {
       }
    }
 
-  // Build method
   @override
-  Widget build(BuildContext context) { final gradientColors = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors; bool showLoadingIndicator = _isLoadingPlayers || _isSaving; return Scaffold( appBar: AppBar( title: Row( mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [ const Text('Update Live Score'), if (showLoadingIndicator) const Padding( padding: EdgeInsets.only(right: 16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),) else const SizedBox(width: 36),],), backgroundColor: Theme.of(context).primaryColor,), body: AnimatedContainer( duration: const Duration(milliseconds: 500), decoration: BoxDecoration( gradient: LinearGradient( colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter,),), child: SingleChildScrollView( padding: const EdgeInsets.all(16.0), child: Column( children: [ _buildScoreDisplay(), const SizedBox(height: 16), _buildScoringInterface(), ],),),),); }
+  Widget build(BuildContext context) { 
+    final gradientColors = widget.isForBoys ? AppTheme.boysGradientColors : AppTheme.girlsGradientColors; 
+    bool showLoadingIndicator = _isLoadingPlayers || _isSaving; 
+    
+    // --- WRAPPED SCAFFOLD IN ALL ANIMATION OVERLAYS (Nested) ---
+    return WicketAnimationOverlay(
+      triggerStream: _wicketAnimationTrigger.stream,
+      child: FourAnimationOverlay(
+        triggerStream: _fourAnimationTrigger.stream,
+        child: SixAnimationOverlay(
+          triggerStream: _sixAnimationTrigger.stream,
+          child: GoalAnimationOverlay(
+             triggerStream: _goalAnimationTrigger.stream,
+             teamAName: widget.teamAName,
+             child: Scaffold( 
+                appBar: AppBar( 
+                  title: Row( 
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+                    children: [ 
+                      const Text('Update Live Score'), 
+                      if (showLoadingIndicator) const Padding( padding: EdgeInsets.only(right: 16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),) else const SizedBox(width: 36),],), backgroundColor: Theme.of(context).primaryColor,), 
+                  body: Stack( // Use Stack to overlay the blur
+                    children: [
+                      AnimatedContainer( 
+                        duration: const Duration(milliseconds: 500), 
+                        decoration: BoxDecoration( gradient: LinearGradient( colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter,),), 
+                        child: SingleChildScrollView( 
+                          padding: const EdgeInsets.all(16.0), 
+                          child: Column( 
+                            children: [ 
+                              _buildScoreDisplay(), 
+                              const SizedBox(height: 16), 
+                              _buildScoringInterface(), 
+                            ],
+                          ),
+                        ),
+                      ),
+                      // --- BLUR EFFECT LAYER ---
+                      // Using Positioned.fill with ClipRect to avoid layout issues
+                      if (_isAnimationPlaying)
+                        Positioned.fill(
+                          child: ClipRect(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                              child: Container(
+                                color: Colors.black.withOpacity(0.2), // Dark overlay
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+              ),
+          ),
+        ),
+      ),
+    ); 
+  }
 
   // Score Display Widget
   Widget _buildScoreDisplay() { String currentTeamAScore = "$_teamARuns/$_teamAWickets"; String currentTeamAOvers = _formatOvers(_teamABalls); String currentTeamBScore = "$_teamBRuns/$_teamBWickets"; String currentTeamBOvers = _formatOvers(_teamBBalls); return Card( elevation: 2, shadowColor: Colors.black.withOpacity(0.1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Column( children: [ _buildAdminScoreboardContent( teamA: widget.teamAName, teamB: widget.teamBName, teamAScore: currentTeamAScore, teamAOvers: currentTeamAOvers, teamBScore: currentTeamBScore, teamBOvers: currentTeamBOvers, matchStatus: _matchStatusText,), Padding( padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 12.0), child: Text( _summaryText, style: const TextStyle( color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500), textAlign: TextAlign.center,),), const Padding( padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1),), _buildAdminPlayerDetailsContent( bowlingTeamName: _bowlingTeamName, battingTeamName: _battingTeamName, bowlerOnStrikeName: _currentBowler?.name ?? "N/A", bowlerOnStrikeFigures: _currentBowler?.getBowlerFigures() ?? "-", bowlerOffStrikeName: "N/A", bowlerOffStrikeFigures: "-", strikerPlayer: _striker, nonStrikerPlayer: _nonStriker,), const SizedBox(height: 12),],),); }
